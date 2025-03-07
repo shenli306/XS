@@ -1,6 +1,6 @@
 """
 首先打开笔趣阁小说网站
-http://www.xuanyge.org/
+"https://www.tpyyc.com"
 然后安装各种库
 pip install requests beautifulsoup4 ebooklib
 """
