@@ -419,44 +419,90 @@ class NovelDownloader:
 
 def main():
     try:
-        downloader = NovelDownloader()
-        novel_id = input("请输入小说ID: ")
-        
-        print("获取小说信息...")
-        novel_info = downloader.get_novel_info(novel_id)
-        print(f"书名：{novel_info['title']}")
-        print(f"作者：{novel_info['author']}")
-        
-        print("\n获取章节列表...")
-        chapters = downloader.get_chapter_list(novel_id)
-        print(f"找到 {len(chapters)} 个章节")
-
-        # 使用线程池并发下载章节
-        print("\n开始下载章节...")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=downloader.max_workers) as executor:
-            # 创建进度条
-            futures = {executor.submit(downloader.download_chapter, chapter): chapter for chapter in chapters}
+        while True:
+            downloader = NovelDownloader()
+            print("\n小说ID格式说明：")
+            print("1. ID是网址中的数字，例如：https://www.jizai22.com/info/80815.html 中的 80815")
+            print("2. 可以直接复制完整网址，程序会自动提取ID")
+            print("3. 也可以直接输入数字ID\n")
             
-            with tqdm(total=len(chapters), desc="下载进度", unit="章") as pbar:
-                for future in concurrent.futures.as_completed(futures):
-                    chapter = futures[future]
+            while True:
+                novel_id = input("请输入小说ID或网址: ").strip()
+                
+                # 如果输入的是完整URL，提取ID
+                if 'jizai22.com' in novel_id:
                     try:
-                        result = future.result()
-                        if result:
-                            chapter.update(result)
-                    except Exception as e:
-                        print(f"\n下载章节 {chapter['title']} 失败: {str(e)}")
-                    pbar.update(1)
+                        novel_id = re.search(r'/(\d+)\.html', novel_id).group(1)
+                    except:
+                        print("无法从URL中提取ID，请直接输入数字ID")
+                        continue
+                
+                # 验证ID是否为纯数字
+                if not novel_id.isdigit():
+                    print("ID格式错误！请输入纯数字ID或完整网址")
+                    continue
+                    
+                break
+            
+            print(f"\n使用ID: {novel_id}")
+            print("获取小说信息...")
+            novel_info = downloader.get_novel_info(novel_id)
+            print(f"书名：{novel_info['title']}")
+            print(f"作者：{novel_info['author']}")
+            
+            print("\n获取章节列表...")
+            chapters = downloader.get_chapter_list(novel_id)
+            print(f"找到 {len(chapters)} 个章节")
 
-        print("\n创建电子书...")
-        if downloader.create_epub(novel_info, chapters):
-            filename = re.sub(r'[<>:"/\\|?*]', '_', f"{novel_info['title']}.epub")
-            print(f"\n电子书已生成: {filename}")
+            # 使用线程池并发下载章节
+            print("\n开始下载章节...")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=downloader.max_workers) as executor:
+                # 创建进度条
+                futures = {executor.submit(downloader.download_chapter, chapter): chapter for chapter in chapters}
+                
+                with tqdm(total=len(chapters), desc="下载进度", unit="章") as pbar:
+                    for future in concurrent.futures.as_completed(futures):
+                        chapter = futures[future]
+                        try:
+                            result = future.result()
+                            if result:
+                                chapter.update(result)
+                        except Exception as e:
+                            print(f"\n下载章节 {chapter['title']} 失败: {str(e)}")
+                        pbar.update(1)
+
+            print("\n创建电子书...")
+            if downloader.create_epub(novel_info, chapters):
+                filename = re.sub(r'[<>:"/\\|?*]', '_', f"{novel_info['title']}.epub")
+                print(f"\n电子书已生成: {filename}")
+            
+            # 询问是否继续下载其他小说
+            while True:
+                choice = input("\n是否继续下载其他小说？(y/q): ").lower().strip()
+                if choice in ['y', 'q']:
+                    break
+                print("无效的输入，请输入 y 继续下载或 q 退出")
+            
+            if choice == 'q':
+                print("\n感谢使用，再见！")
+                break
 
     except KeyboardInterrupt:
         print("\n用户取消下载")
     except Exception as e:
         print(f"发生错误: {str(e)}")
+        # 发生错误时也询问是否继续
+        while True:
+            choice = input("\n是否重试？(y/q): ").lower().strip()
+            if choice in ['y', 'q']:
+                break
+            print("无效的输入，请输入 y 重试或 q 退出")
+        
+        if choice == 'y':
+            print("\n重新开始...")
+            main()  # 递归调用
+        else:
+            print("\n感谢使用，再见！")
 
 if __name__ == '__main__':
     main()
