@@ -308,7 +308,11 @@ def download_chapter_content(session: requests.Session, chapter: Chapter, page_u
             if text and not any(skip in text for skip in [
                 '最新章节', '言情中文网', '手机阅读', '首发网站', 
                 '本章未完', '加入书签', '推荐上一页',
-                '下载本书', '更新速度最快', '免费阅读'
+                '下载本书', '更新速度最快', '免费阅读',
+                '关於登录用户跨设备保存书架的问题',  # 添加新的过滤词
+                '清除浏览器的Cookie',  # 添加新的过滤词
+                '重新登陆并加入书架' ,
+                '本站采用Cookie技术来保存您的「阅读记录」和「书架」, 所以清除浏览器Cookie数据丶重装浏览器 之类的操作会让您的阅读进度消失哦, 建议可以偶尔截图保存书架, 以防找不到正在阅读的小说!' # 添加新的过滤词
             ]):
                 # 清理特殊字符
                 text = text.replace('&amp;#x38c9;', '入')  # 处理特殊字符
