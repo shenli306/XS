@@ -475,10 +475,23 @@ def test_打开万书屋首页():
         if not os.path.exists(小说目录):
             os.makedirs(小说目录)
 
-        最大页数 = 10  # 设置最大页数限制，防止无限循环
+        最大页数 = 20  # 设置最大页数限制，防止无限循环
         当前页数 = 1
         连续无新增章节次数 = 0  # 初始化连续无新增章节计数器
+        所有章节列表 = []  # 存储所有章节的列表
+        获取到的章节ID集合 = set()  # 用于检查章节是否重复的ID集合
 
+        打印标题("获取章节列表")
+        
+        # 保存章节列表页面，用于调试
+        os.makedirs(f'{下载目录}/章节列表页面', exist_ok=True)
+        
+        # 获取已经打开的页面内容
+        页面源码 = 浏览器.driver.page_source
+        with open(f'{下载目录}/章节列表页面/章节列表页面_{当前页数}.html', 'w', encoding='utf-8') as f:
+            f.write(页面源码)
+            
+        # 处理章节列表循环
         while 当前页数 <= 最大页数:  # 添加最大页数限制
             print(f"{Fore.CYAN}正在获取第 {当前页数} 页章节列表...{Style.RESET_ALL}")
             
@@ -488,97 +501,212 @@ def test_打开万书屋首页():
             
             # 获取开始爬取前的章节数量
             开始章节数量 = len(所有章节列表)
+            当前页面新增章节数 = 0
             
-            # 查找章节列表容器
-            章节列表容器 = soup.select_one('.chapterList .list')
-            if not 章节列表容器:
-                print(f"{Fore.YELLOW}未找到章节列表容器，章节获取结束{Style.RESET_ALL}")
-                break
+            # 查找所有章节列表区块
+            章节区块列表 = soup.select('.chapterList')
             
-            # 获取章节元素
-            章节元素列表 = 章节列表容器.select('li .name a')
-            if not 章节元素列表:
-                print(f"{Fore.YELLOW}当前页面未找到章节列表，章节获取结束{Style.RESET_ALL}")
-                break
-            
-            # 处理当前页面的章节
-            for 章节元素 in 章节元素列表:
-                章节名 = 章节元素.text.strip()
-                章节链接 = 章节元素['href']
+            if 章节区块列表:
+                打印成功(f"找到 {len(章节区块列表)} 个章节区块")
                 
-                # 如果链接是相对路径，转为绝对路径
-                if not 章节链接.startswith('http'):
-                    基础URL = '/'.join(小说页面URL.split('/')[:3])
-                    章节链接 = f"{基础URL}{章节链接}" if 章节链接.startswith('/') else f"{基础URL}/{章节链接}"
+                # 遍历每个章节区块
+                for 索引, 章节区块 in enumerate(章节区块列表):
+                    # 获取区块标题
+                    区块标题元素 = 章节区块.select_one('.tit.font18')
+                    区块标题 = 区块标题元素.text.strip() if 区块标题元素 else f"未命名区块_{索引+1}"
+                    
+                    # 仅在第一轮获取时打印区块标题
+                    if 当前页数 == 1:
+                        打印信息(f"区块[{索引+1}]", 区块标题, Fore.CYAN)
+                    
+                    # 获取章节列表容器
+                    章节列表容器 = 章节区块.select_one('.list.font14')
+                    if 章节列表容器:
+                        # 获取章节元素
+                        章节元素列表 = 章节列表容器.select('li .name a') or 章节列表容器.select('li a')
+                        
+                        if 章节元素列表:
+                            打印信息(f"区块[{索引+1}] {区块标题}", f"发现 {len(章节元素列表)} 个章节", Fore.GREEN)
+                            
+                            # 处理当前区块的章节
+                            for 章节元素 in 章节元素列表:
+                                章节名 = 章节元素.text.strip()
+                                章节链接 = 章节元素['href']
+                                
+                                # 从链接中提取章节ID
+                                章节ID匹配 = re.search(r'/book/([A-Za-z0-9]+)-(\d+)\.html', 章节链接)
+                                if 章节ID匹配:
+                                    小说ID = 章节ID匹配.group(1)
+                                    章节ID = 章节ID匹配.group(2)
+                                    完整章节ID = f"{小说ID}-{章节ID}"
+                                else:
+                                    # 如果无法提取ID，使用完整链接作为ID
+                                    完整章节ID = 章节链接
+                                
+                                # 如果链接是相对路径，转为绝对路径
+                                if not 章节链接.startswith('http'):
+                                    基础URL = '/'.join(小说页面URL.split('/')[:3])
+                                    章节链接 = f"{基础URL}{章节链接}" if 章节链接.startswith('/') else f"{基础URL}/{章节链接}"
+                                
+                                # 检查是否已经存在该章节，避免重复添加
+                                if 完整章节ID not in 获取到的章节ID集合:
+                                    所有章节列表.append((章节名, 章节链接, 完整章节ID))
+                                    获取到的章节ID集合.add(完整章节ID)
+                                    当前页面新增章节数 += 1
+                                    
+                                    # 仅在调试模式下打印每个章节
+                                    # print(f"· {章节名} [{完整章节ID}]")
+                                # else:
+                                    # 不打印重复章节，减少输出噪音
+                                    # print(f"{Fore.YELLOW}· 重复章节：{章节名} [{完整章节ID}]{Style.RESET_ALL}")
+                        else:
+                            打印警告(f"区块[{索引+1}] {区块标题}: 未找到章节链接")
+                    else:
+                        打印警告(f"区块[{索引+1}] {区块标题}: 未找到章节列表容器")
+            else:
+                打印警告(f"未找到任何章节区块")
                 
-                # 检查是否已经存在该章节，避免重复添加
-                已存在章节链接 = [链接 for _, 链接 in 所有章节列表]
-                if 章节链接 not in 已存在章节链接:
-                    所有章节列表.append((章节名, 章节链接))
+                # 尝试直接查找章节列表元素
+                章节元素列表 = soup.select('.list.font14 li .name a') or soup.select('.list.font14 li a')
+                if 章节元素列表:
+                    打印成功(f"直接找到 {len(章节元素列表)} 个章节")
+                    
+                    # 处理页面上的章节
+                    for 章节元素 in 章节元素列表:
+                        章节名 = 章节元素.text.strip()
+                        章节链接 = 章节元素['href']
+                        
+                        # 从链接中提取章节ID
+                        章节ID匹配 = re.search(r'/book/([A-Za-z0-9]+)-(\d+)\.html', 章节链接)
+                        if 章节ID匹配:
+                            小说ID = 章节ID匹配.group(1)
+                            章节ID = 章节ID匹配.group(2)
+                            完整章节ID = f"{小说ID}-{章节ID}"
+                        else:
+                            # 如果无法提取ID，使用完整链接作为ID
+                            完整章节ID = 章节链接
+                        
+                        # 如果链接是相对路径，转为绝对路径
+                        if not 章节链接.startswith('http'):
+                            基础URL = '/'.join(小说页面URL.split('/')[:3])
+                            章节链接 = f"{基础URL}{章节链接}" if 章节链接.startswith('/') else f"{基础URL}/{章节链接}"
+                        
+                        # 检查是否已经存在该章节，避免重复添加
+                        if 完整章节ID not in 获取到的章节ID集合:
+                            所有章节列表.append((章节名, 章节链接, 完整章节ID))
+                            获取到的章节ID集合.add(完整章节ID)
+                            当前页面新增章节数 += 1
+                            # print(f"· {章节名} [{完整章节ID}]")
+                        # else:
+                            # print(f"{Fore.YELLOW}· 重复章节：{章节名} [{完整章节ID}]{Style.RESET_ALL}")
                 else:
-                    print(f"{Fore.YELLOW}检测到重复章节：{章节名}{Style.RESET_ALL}")
+                    # 保存当前页面源码以便调试
+                    with open(f'{下载目录}/章节列表页面/章节列表页面错误_{当前页数}.html', 'w', encoding='utf-8') as f:
+                        f.write(页面源码)
+                    
+                    打印警告(f"未找到任何章节元素，页面已保存为章节列表页面错误_{当前页数}.html")
+                    连续无新增章节次数 += 1
             
             # 获取结束后的章节数量，检查是否有新章节添加
             结束章节数量 = len(所有章节列表)
             新增章节数 = 结束章节数量 - 开始章节数量
             
-            # 检查当前页是否为最后一页
-            是否最后一页 = False
-            下一页按钮 = soup.select_one('.next')
-            没有了按钮 = soup.select_one('.noNext.disabled')
+            打印信息(f"第 {当前页数} 页", f"新增章节 {当前页面新增章节数} 个，总计 {结束章节数量} 个", Fore.GREEN)
             
-            if 没有了按钮 and 'display: none' not in 没有了按钮.get('style', '') and 没有了按钮.text.strip() == "没有了":
-                是否最后一页 = True
-                print(f"{Fore.YELLOW}已到达最后页（找到'没有了'标记）{Style.RESET_ALL}")
-            
-            # 如果没有新增章节或已到最后页，则退出循环
-            if 新增章节数 == 0:
+            # 如果当前页面没有新增章节，增加连续无新增计数
+            if 当前页面新增章节数 == 0:
                 连续无新增章节次数 += 1
-                print(f"{Fore.YELLOW}当前页未获取到新章节，可能是重复页面或已获取完毕{Style.RESET_ALL}")
+                打印警告(f"当前页未获取到新章节，可能是重复页面或已获取完毕")
                 
                 # 如果连续两页都没有新增章节，强制终止
-                if 连续无新增章节次数 >= 2 or 是否最后一页:
-                    print(f"{Fore.YELLOW}连续多页未获取到新章节或已到达最后页，强制终止获取{Style.RESET_ALL}")
+                if 连续无新增章节次数 >= 2:
+                    打印警告(f"连续多页未获取到新章节，强制终止获取")
                     break
             else:
                 # 重置连续无新增计数
                 连续无新增章节次数 = 0
             
+            # 检查当前页是否为最后一页
+            是否最后一页 = False
+            
+            # 检查"下一页"按钮的状态
+            下一页元素 = soup.select_one('.next')
+            没有了元素 = soup.select_one('.noNext.disabled')
+            
+            # 检查是否有"没有了"文本，并且不是隐藏的
+            if 没有了元素 and 'display: none' not in str(没有了元素) and 没有了元素.text.strip() == "没有了":
+                是否最后一页 = True
+                打印警告(f"已到达最后页（找到'没有了'标记）")
+            
+            # 检查下一页按钮是否不存在或者隐藏
+            if not 下一页元素 or 'display: none' in str(下一页元素):
+                是否最后一页 = True
+                打印警告(f"已到达最后页（下一页按钮不可用）")
+            
+            # 如果是最后一页，则退出循环
+            if 是否最后一页:
+                打印警告(f"已到达最后页，停止获取章节列表")
+                break
+            
             # 尝试查找并点击下一页按钮
             try:
+                # 如果当前已经是最后一页，则退出
+                if 是否最后一页:
+                    break
+                
+                # 尝试通过CSS选择器找到下一页按钮并点击
                 下一页按钮元素 = 浏览器.driver.find_element('css selector', '.next')
-                if 下一页按钮元素:
+                
+                if 下一页按钮元素 and 下一页按钮元素.is_displayed():
+                    # 使用JavaScript点击，避免一些点击问题
                     浏览器.driver.execute_script("arguments[0].click();", 下一页按钮元素)
-                    print(f"{Fore.CYAN}点击了下一页按钮，准备获取下一页章节列表{Style.RESET_ALL}")
-                    time.sleep(1)  # 等待页面加载
+                    打印成功(f"点击了下一页按钮，准备获取下一页章节列表")
+                    时间戳 = int(time.time())
+                    # 等待页面加载
+                    time.sleep(2)
+                    
+                    # 保存下一页页面以便调试
+                    页面源码 = 浏览器.driver.page_source
+                    with open(f'{下载目录}/章节列表页面/章节列表页面_{当前页数+1}.html', 'w', encoding='utf-8') as f:
+                        f.write(页面源码)
+                    
                     当前页数 += 1
                 else:
                     # 尝试使用下拉框选择页码
                     try:
                         选择框 = 浏览器.driver.find_element('css selector', '.select')
-                        # 获取下一个选项值
-                        浏览器.driver.execute_script(f"arguments[0].value = '{当前页数 + 1}';", 选择框)
-                        浏览器.driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", 选择框)
-                        print(f"{Fore.CYAN}通过下拉框选择了新的页码分组{Style.RESET_ALL}")
-                        time.sleep(1)
-                        当前页数 += 1
+                        # 如果选择框可见
+                        if 选择框.is_displayed():
+                            # 获取下一个选项值
+                            浏览器.driver.execute_script(f"arguments[0].value = '{当前页数 + 1}';", 选择框)
+                            浏览器.driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", 选择框)
+                            打印成功(f"通过下拉框选择了新的页码分组")
+                            time.sleep(2)  # 等待页面加载
+                            当前页数 += 1
+                        else:
+                            打印警告(f"选择框不可见，无法继续翻页")
+                            break
                     except Exception as e:
-                        print(f"{Fore.RED}无法继续获取章节，{e}{Style.RESET_ALL}")
+                        打印错误(f"无法继续获取章节: {e}")
                         break
             except Exception as e:
-                print(f"{Fore.RED}获取下一页失败：{e}，章节列表获取完毕{Style.RESET_ALL}")
+                打印错误(f"获取下一页失败: {e}")
+                # 保存当前页面，便于分析错误
+                页面源码 = 浏览器.driver.page_source
+                with open(f'{下载目录}/章节列表页面/翻页错误_{当前页数}.html', 'w', encoding='utf-8') as f:
+                    f.write(页面源码)
                 break
             
             # 页数检查 - 如果超过了最大页数限制则终止
             if 当前页数 > 最大页数:
-                print(f"{Fore.RED}已达到最大页数限制（{最大页数}页），强制终止获取{Style.RESET_ALL}")
+                打印错误(f"已达到最大页数限制（{最大页数}页），强制终止获取")
                 break
         
         # 确保章节按正确顺序排列 - 根据章节URL中的序号或按添加顺序排序
         所有章节列表_排序 = []
-        for 章节名, 章节链接 in 所有章节列表:
-            # 尝试从URL中提取章节序号
-            章节序号匹配 = re.search(r'(\d+)\.html$', 章节链接)
+        for 章节名, 章节链接, 章节ID in 所有章节列表:
+            # 尝试从ID中提取章节序号
+            章节序号匹配 = re.search(r'-(\d+)$', 章节ID)
             if 章节序号匹配:
                 序号 = int(章节序号匹配.group(1))
                 所有章节列表_排序.append((序号, 章节名, 章节链接))
@@ -591,7 +719,7 @@ def test_打开万书屋首页():
         # 转换回原来的格式
         所有章节列表 = [(章节名, 章节链接) for _, 章节名, 章节链接 in 所有章节列表_排序]
         
-        打印成功(f"共获取到 {len(所有章节列表)} 个章节，总共爬取了 {当前页数} 页")
+        打印成功(f"共获取到 {len(所有章节列表)} 个不重复章节，总共爬取了 {当前页数} 页")
         打印分隔线()
         
         # 询问是否下载所有章节
@@ -649,22 +777,43 @@ def test_打开万书屋首页():
                         for 广告内容 in 需要移除的内容:
                             章节内容 = 章节内容.replace(广告内容, "")
                         
+                        # 强化URL清洗逻辑
                         # 移除形如@http://www.shuwuwan.com/book/F72W-834.html的网址
                         章节内容 = re.sub(r'@https?://www\.shuwuwan\.com/book/\w+-\d+\.html', '', 章节内容)
                         # 移除任何网址格式
                         章节内容 = re.sub(r'@https?://[^\s]+', '', 章节内容)
                         
+                        # 移除括号内的URL，如(http:///book/5WAA-1.html)
+                        章节内容 = re.sub(r'\(https?:/?/?/book/[A-Za-z0-9]+-\d+\.html\)', '', 章节内容)
+                        # 更通用的括号内URL移除模式
+                        章节内容 = re.sub(r'\(https?:/?/?/?[^\)]+\)', '', 章节内容)
+                        
+                        # 移除末尾可能出现的URL或特殊字符
+                        章节内容 = re.sub(r'http:///book/[A-Za-z0-9]+-\d+\.html$', '', 章节内容)
+                        章节内容 = re.sub(r'https?://[^\s]+$', '', 章节内容)
+                        
+                        # 针对无协议头的URL格式，如: //www.domain.com 或 /book/id-num.html
+                        章节内容 = re.sub(r'//www\.[^\s]+', '', 章节内容)
+                        章节内容 = re.sub(r'/book/[A-Za-z0-9]+-\d+\.html', '', 章节内容)
+
                         # 移除空行
                         章节内容行 = 章节内容.split('\n')
                         清洗后章节内容 = []
                         
                         for 行 in 章节内容行:
                             行 = 行.strip()
+                            # 跳过可能包含URL或广告的行
+                            if 'http' in 行 or '/book/' in 行 or '举报' in 行 or '首发' in 行:
+                                continue
+                            
                             # 忽略空行和只包含特殊字符的行
                             if 行 and not all(c in ',.!?;:。，！？；：-—_=+~`@#$%^&*()[]{}<>/\\|\'"' for c in 行):
                                 清洗后章节内容.append(行)
                         
                         章节内容 = '\n\n'.join(清洗后章节内容)
+                        
+                        # 最后一次清理，移除可能的尾部URL
+                        章节内容 = re.sub(r'\n\n.*?https?://.*?$', '', 章节内容)
                         
                         # 保存章节内容
                         章节文件名 = f"{idx+1:04d}_{章节名}.txt"  # 格式化章节序号为4位数
@@ -893,5 +1042,4 @@ def 生成EPUB文件(小说标题, 作者, 小说介绍, 小说目录, 下载目
     打印信息("总章节数", len(章节列表), Fore.CYAN)
     打印信息("下载时间", time.strftime('%Y-%m-%d %H:%M:%S'), Fore.CYAN)
     打印标题("下载完成")
-
 

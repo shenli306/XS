@@ -250,6 +250,7 @@ def test_打开辣文小说18首页():
             except Exception as e:
                 打印警告(f"获取第{page_num}页失败，继续处理已有结果")
                 break
+            进度条.close()
     
     # 如果没有找到任何搜索结果
     if not 所有搜索结果:
@@ -484,96 +485,106 @@ def test_打开辣文小说18首页():
     下载格式 = input(f"{Fore.YELLOW}选择下载格式 (1:TXT, 2:EPUB, 3:两种都要): {Style.RESET_ALL}")
     
     # 章节下载函数
-    def 下载章节(任务队列, 结果列表, 浏览器会话):
-        while not 任务队列.empty():
-            try:
-                序号, 章节标题, 章节链接 = 任务队列.get(block=False)
-                
-                尝试次数 = 0
-                最大尝试次数 = 3
-                成功 = False
-                
-                while 尝试次数 < 最大尝试次数 and not 成功:
-                    try:
-                        # 使用requests获取章节内容
-                        响应 = 浏览器会话.get(章节链接, timeout=10)
-                        响应.raise_for_status()
+    def 下载章节(任务队列, 结果列表, 浏览器会话, 总章节数):
+        # 创建线程锁用于保护结果列表
+        结果锁 = threading.Lock()
+        
+        def 下载单个章节(序号, 章节标题, 章节链接):
+            尝试次数 = 0
+            最大尝试次数 = 3
+            成功 = False
+            
+            while 尝试次数 < 最大尝试次数 and not 成功:
+                try:
+                    # 使用requests获取章节内容
+                    响应 = 浏览器会话.get(章节链接, timeout=10)
+                    响应.raise_for_status()
+                    
+                    # 使用BeautifulSoup解析内容
+                    章节soup = BeautifulSoup(响应.text, 'html.parser')
+                    
+                    # 优先尝试新的内容元素布局(article.content)
+                    内容元素 = 章节soup.select_one('article.content')
+                    
+                    if not 内容元素:
+                        内容元素 = 章节soup.select_one('#content')
+                    if not 内容元素:
+                        内容元素 = 章节soup.select_one('.content')
+                    if not 内容元素:
+                        内容元素 = 章节soup.select_one('.article-content')
+                    if not 内容元素:
+                        内容元素 = 章节soup.select_one('.chapter-content')
+                    if not 内容元素:
+                        内容元素 = 章节soup.select_one('.read-content')
+                    if not 内容元素:
+                        内容元素 = 章节soup.select_one('.text')
+                    
+                    if 内容元素:
+                        # 去除广告和脚本
+                        for 脚本 in 内容元素.select('script'):
+                            脚本.decompose()
+                        for 广告 in 内容元素.select('.ads, .ad, ins, iframe'):
+                            广告.decompose()
                         
-                        # 使用BeautifulSoup解析内容
-                        章节soup = BeautifulSoup(响应.text, 'html.parser')
+                        # 获取文本并清理
+                        内容 = 内容元素.get_text('\n', strip=True)
+                        内容 = re.sub(r'\n+', '\n\n', 内容)  # 规范化换行
+                        内容 = re.sub(r'(https?://[^\s]+)', '', 内容)  # 移除URL
                         
-                        # 优先尝试新的内容元素布局(article.content)
-                        内容元素 = 章节soup.select_one('article.content')
+                        # 移除常见广告文本
+                        广告词列表 = [
+                            "笔趣阁", "本章未完，请点击下一页继续阅读", "手机阅读", 
+                            "天才一秒记住", "全文阅读", "添加书签", "投推荐票",
+                            "请记住本站域名", "最新章节", "请关注", "精彩小说网",
+                            "章节目录", "加入书签", "点击下载", "手机版访问",
+                            "访问下载", "本站网址", "手机请访问", "请牢记",
+                            "免费阅读", "请收藏本站", "手机阅读器",
+                            "本站永久域名", "aaqqcc.com", "请加入收藏", "方便下次访问"
+                        ]
                         
-                        if not 内容元素:
-                            内容元素 = 章节soup.select_one('#content')
-                        if not 内容元素:
-                            内容元素 = 章节soup.select_one('.content')
-                        if not 内容元素:
-                            内容元素 = 章节soup.select_one('.article-content')
-                        if not 内容元素:
-                            内容元素 = 章节soup.select_one('.chapter-content')
-                        if not 内容元素:
-                            内容元素 = 章节soup.select_one('.read-content')
-                        if not 内容元素:
-                            内容元素 = 章节soup.select_one('.text')
+                        for 广告词 in 广告词列表:
+                            内容 = 内容.replace(广告词, "")
                         
-                        if 内容元素:
-                            # 去除广告和脚本
-                            for 脚本 in 内容元素.select('script'):
-                                脚本.decompose()
-                            for 广告 in 内容元素.select('.ads, .ad, ins, iframe'):
-                                广告.decompose()
-                            
-                            # 获取文本并清理
-                            内容 = 内容元素.get_text('\n', strip=True)
-                            内容 = re.sub(r'\n+', '\n\n', 内容)  # 规范化换行
-                            内容 = re.sub(r'(https?://[^\s]+)', '', 内容)  # 移除URL
-                            
-                            # 移除常见广告文本
-                            广告词列表 = [
-                                "笔趣阁", "本章未完，请点击下一页继续阅读", "手机阅读", 
-                                "天才一秒记住", "全文阅读", "添加书签", "投推荐票",
-                                "请记住本站域名", "最新章节", "请关注", "精彩小说网",
-                                "章节目录", "加入书签", "点击下载", "手机版访问",
-                                "访问下载", "本站网址", "手机请访问", "请牢记",
-                                "免费阅读", "请收藏本站", "手机阅读器",
-                                "本站永久域名", "aaqqcc.com", "请加入收藏", "方便下次访问"
-                            ]
-                            
-                            for 广告词 in 广告词列表:
-                                内容 = 内容.replace(广告词, "")
-                            
-                            # 使用正则表达式移除更多广告文本
-                            内容 = re.sub(r'(www\.[a-zA-Z0-9]+\.[a-z]+)', '', 内容)
-                            内容 = re.sub(r'([a-zA-Z0-9]+\.com)', '', 内容)
-                            内容 = re.sub(r'([a-zA-Z0-9]+\.net)', '', 内容)
-                            内容 = re.sub(r'([a-zA-Z0-9]+\.org)', '', 内容)
-                            
-                            # 移除特定格式的广告语句
-                            内容 = re.sub(r'本站永久域名[：:].*?方便下次访问', '', 内容)
-                            内容 = re.sub(r'请记住本站域名[：:].*?$', '', 内容, flags=re.MULTILINE)
-                            内容 = re.sub(r'.*?永久网址[：:].*?$', '', 内容, flags=re.MULTILINE)
-                            
-                            # 移除开头和结尾的空行
-                            内容 = 内容.strip()
-                            
-                            # 保存章节
+                        # 使用正则表达式移除更多广告文本
+                        内容 = re.sub(r'(www\.[a-zA-Z0-9]+\.[a-z]+)', '', 内容)
+                        内容 = re.sub(r'([a-zA-Z0-9]+\.com)', '', 内容)
+                        内容 = re.sub(r'([a-zA-Z0-9]+\.net)', '', 内容)
+                        内容 = re.sub(r'([a-zA-Z0-9]+\.org)', '', 内容)
+                        
+                        # 移除特定格式的广告语句
+                        内容 = re.sub(r'本站永久域名[：:].*?方便下次访问', '', 内容)
+                        内容 = re.sub(r'请记住本站域名[：:].*?$', '', 内容, flags=re.MULTILINE)
+                        内容 = re.sub(r'.*?永久网址[：:].*?$', '', 内容, flags=re.MULTILINE)
+                        
+                        # 移除开头和结尾的空行
+                        内容 = 内容.strip()
+                        
+                        # 使用线程锁保护结果列表
+                        with 结果锁:
                             结果列表.append((序号, 章节标题, 内容))
-                            成功 = True
-                        else:
-                            尝试次数 += 1
-                            time.sleep(1)
-                    except Exception as e:
+                        成功 = True
+                    else:
                         尝试次数 += 1
-                        time.sleep(2)
-                
-                if not 成功:
-                    print(f"{Fore.RED}下载章节 {章节标题} 失败{Style.RESET_ALL}")
-                
-                任务队列.task_done()
-            except Exception:
-                break
+                        time.sleep(1)
+                except Exception as e:
+                    尝试次数 += 1
+                    time.sleep(2)
+            
+            if not 成功:
+                print(f"{Fore.RED}下载章节 {章节标题} 失败{Style.RESET_ALL}")
+        
+        # 创建线程池
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as 线程池:
+            # 创建进度条
+            with tqdm(total=总章节数, desc="下载进度", ncols=100) as 进度条:
+                while not 任务队列.empty():
+                    try:
+                        序号, 章节标题, 章节链接 = 任务队列.get(block=False)
+                        线程池.submit(下载单个章节, 序号, 章节标题, 章节链接)
+                        进度条.update(1)
+                        任务队列.task_done()
+                    except Exception:
+                        break
     
     # 下载所有章节
     打印标题("开始下载章节")
