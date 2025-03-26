@@ -235,32 +235,103 @@ class 辣文小说18下载器:
             详情页源码 = self.浏览器.driver.page_source
             详情soup = BeautifulSoup(详情页源码, 'html.parser')
             
-            # 获取小说标题
-            小说标题 = None
-            书籍区块 = 详情soup.select_one('main.container section.book')
-            if 书籍区块:
-                标题元素 = 书籍区块.select_one('.txt h1')
-                if 标题元素:
-                    小说标题 = 标题元素.text.strip()
+            # 获取书籍区块
+            书籍区块 = 详情soup.select_one('section.book')
+            if not 书籍区块:
+                raise Exception("无法获取书籍信息")
             
-            if not 小说标题:
-                小说标题 = 详情soup.select_one('#info h1').text.strip() if 详情soup.select_one('#info h1') else "未知标题"
+            # 获取小说标题
+            小说标题 = 书籍区块.select_one('.txt h1').text.strip()
             
             # 获取作者
             作者 = "未知"
-            作者元素 = 书籍区块.select_one('.authors dd a') if 书籍区块 else None
+            作者元素 = 书籍区块.select_one('.authors dd a')
             if 作者元素:
                 作者 = 作者元素.text.strip()
+            
+            # 获取小说状态
+            状态 = "未知"
+            状态元素 = 书籍区块.select_one('.status dd')
+            if 状态元素:
+                状态 = 状态元素.text.strip()
+            
+            # 获取评分
+            评分 = "未知"
+            评分元素 = 书籍区块.select_one('.score dd')
+            if 评分元素:
+                评分 = 评分元素.text.strip()
+            
+            # 获取肉量
+            肉量 = "未知"
+            肉量元素 = 书籍区块.select_one('.pornrate dd')
+            if 肉量元素:
+                肉量 = 肉量元素.text.strip()
+            
+            # 获取字数
+            字数 = "未知"
+            字数元素 = 书籍区块.select_one('.wordcount dd')
+            if 字数元素:
+                字数 = 字数元素.text.strip()
+            
+            # 获取分类
+            分类 = "未知"
+            分类元素 = 书籍区块.select_one('.categories dd a')
+            if 分类元素:
+                分类 = 分类元素.text.strip()
+            
+            # 获取最新章节
+            最新章节 = "未知"
+            最新章节元素 = 书籍区块.select_one('.new dd a')
+            if 最新章节元素:
+                最新章节 = 最新章节元素.text.strip()
             
             # 获取简介
             小说介绍 = "暂无简介"
             简介区块 = 详情soup.select_one('section .book-desc')
             if 简介区块:
                 小说介绍 = 简介区块.get_text('\n', strip=True)
-            else:
-                小说介绍元素 = 详情soup.select_one('#intro')
-                if 小说介绍元素:
-                    小说介绍 = 小说介绍元素.text.strip()
+            
+            # 下载封面图片
+            封面链接 = None
+            封面元素 = 书籍区块.select_one('.cover img')
+            if 封面元素 and 'src' in 封面元素.attrs:
+                封面链接 = 封面元素['src']
+                if not 封面链接.startswith('http'):
+                    封面链接 = f"https://www.aaqqcc.com{封面链接}"
+            
+            # 创建下载目录
+            下载目录 = 'downloads'
+            if not os.path.exists(下载目录):
+                os.makedirs(下载目录)
+            
+            小说保存目录 = os.path.join(下载目录, 小说标题)
+            if not os.path.exists(小说保存目录):
+                os.makedirs(小说保存目录)
+            
+            # 下载封面图片
+            if 封面链接:
+                try:
+                    封面响应 = requests.get(封面链接, timeout=10)
+                    封面响应.raise_for_status()
+                    封面路径 = os.path.join(小说保存目录, 'cover.jpg')
+                    with open(封面路径, 'wb') as f:
+                        f.write(封面响应.content)
+                    self.输出日志("封面图片下载成功")
+                except Exception as e:
+                    self.输出日志(f"下载封面图片失败: {str(e)}", True)
+            
+            # 保存小说信息
+            with open(f'{小说保存目录}/{小说标题}_信息.txt', 'w', encoding='utf-8') as f:
+                f.write(f"标题: 《{小说标题}》\n")
+                f.write(f"作者: {作者}\n")
+                f.write(f"状态: {状态}\n")
+                f.write(f"评分: {评分}\n")
+                f.write(f"肉量: {肉量}\n")
+                f.write(f"字数: {字数}\n")
+                f.write(f"分类: {分类}\n")
+                f.write(f"最新章节: {最新章节}\n\n")
+                f.write("小说简介:\n")
+                f.write(小说介绍)
             
             # 获取章节列表
             章节列表元素 = None
@@ -284,26 +355,11 @@ class 辣文小说18下载器:
             if not 章节列表元素:
                 raise Exception("无法获取章节列表")
             
-            # 创建下载目录
-            下载目录 = 'downloads'
-            if not os.path.exists(下载目录):
-                os.makedirs(下载目录)
+            # 创建章节列表和结果列表
+            章节列表 = []
+            章节结果 = [None] * len(章节列表元素)  # 预分配固定大小的列表
             
-            小说保存目录 = os.path.join(下载目录, 小说标题)
-            if not os.path.exists(小说保存目录):
-                os.makedirs(小说保存目录)
-            
-            # 保存小说信息
-            with open(f'{小说保存目录}/{小说标题}_信息.txt', 'w', encoding='utf-8') as f:
-                f.write(f"标题: 《{小说标题}》\n")
-                f.write(f"作者: {作者}\n\n")
-                f.write("小说简介:\n")
-                f.write(小说介绍)
-            
-            # 创建章节下载队列
-            章节队列 = Queue()
-            小说目录 = []
-            
+            # 收集所有章节信息
             for i, 章节 in enumerate(章节列表元素):
                 章节标题 = 章节.text.strip()
                 章节链接 = 章节['href']
@@ -313,30 +369,51 @@ class 辣文小说18下载器:
                     else:
                         基础链接 = '/'.join(小说链接.split('/')[:-1])
                         章节链接 = f"{基础链接}/{章节链接}"
-                章节队列.put((i + 1, 章节标题, 章节链接))
+                章节列表.append((i, 章节标题, 章节链接))
             
-            总章节数 = len(章节列表元素)
-            成功下载章节数 = 0
+            总章节数 = len(章节列表)
             
             # 创建线程池下载章节
             with concurrent.futures.ThreadPoolExecutor(max_workers=5) as 线程池:
-                while not 章节队列.empty():
+                # 提交所有下载任务
+                future_to_chapter = {}
+                for 序号, 章节标题, 章节链接 in 章节列表:
+                    future = 线程池.submit(self.下载单个章节, 序号, 章节标题, 章节链接)
+                    future_to_chapter[future] = 序号
+                
+                # 等待所有任务完成并收集结果
+                for future in concurrent.futures.as_completed(future_to_chapter):
+                    序号 = future_to_chapter[future]
                     try:
-                        序号, 章节标题, 章节链接 = 章节队列.get(block=False)
-                        线程池.submit(self.下载单个章节, 序号, 章节标题, 章节链接, 小说保存目录, 小说目录, 总章节数)
-                        章节队列.task_done()
-                    except Exception:
-                        break
+                        章节内容 = future.result()
+                        if 章节内容:
+                            章节结果[序号] = 章节内容
+                            # 更新进度
+                            if self.progress_callback:
+                                self.progress_callback(序号 + 1, 总章节数)
+                    except Exception as e:
+                        self.输出日志(f"下载章节 {序号 + 1} 时出错: {str(e)}", True)
             
-            # 等待所有章节下载完成
-            章节队列.join()
+            # 按顺序保存章节
+            小说目录 = []
+            for i, 章节内容 in enumerate(章节结果):
+                if 章节内容:
+                    章节标题, 内容 = 章节内容
+                    # 保存章节内容
+                    章节文件名 = f"{i:04d}_{章节标题}.txt"
+                    with open(f'{小说保存目录}/{章节文件名}', 'w', encoding='utf-8') as f:
+                        f.write(f"{章节标题}\n\n")
+                        f.write(内容)
+                    
+                    # 添加到小说目录
+                    小说目录.append({"title": 章节标题, "content": 内容})
             
             # 根据选择生成电子书
             if 下载格式 in ["txt", "both"]:
                 生成TXT文件(小说标题, 作者, 小说介绍, 小说目录, 小说保存目录)
             
             if 下载格式 in ["epub", "both"]:
-                生成EPUB文件(小说标题, 作者, 小说介绍, 小说目录, 小说保存目录)
+                生成EPUB文件(小说标题, 作者, 小说介绍, 小说目录, 小说保存目录, 封面路径 if 封面链接 else None)
             
             self.输出日志(f"下载完成：共 {len(小说目录)} 章")
             return True
@@ -349,7 +426,7 @@ class 辣文小说18下载器:
                 self.浏览器.driver.quit()
                 self.浏览器 = None
     
-    def 下载单个章节(self, 序号, 章节标题, 章节链接, 小说保存目录, 小说目录, 总章节数):
+    def 下载单个章节(self, 序号, 章节标题, 章节链接):
         try:
             # 使用requests获取章节内容，设置正确的编码
             响应 = requests.get(章节链接, timeout=10)
@@ -414,24 +491,14 @@ class 辣文小说18下载器:
                 # 移除开头和结尾的空行
                 内容 = 内容.strip()
                 
-                # 保存章节内容
-                章节文件名 = f"{序号:04d}_{章节标题}.txt"
-                with open(f'{小说保存目录}/{章节文件名}', 'w', encoding='utf-8') as f:
-                    f.write(f"{章节标题}\n\n")
-                    f.write(内容)
-                
-                # 添加到小说目录
-                小说目录.append({"title": 章节标题, "content": 内容})
-                
-                # 更新进度
-                if self.progress_callback:
-                    self.progress_callback(序号, 总章节数)
-                
+                return (章节标题, 内容)
             else:
                 self.输出日志(f"无法获取章节 {章节标题} 的内容", True)
+                return None
                 
         except Exception as e:
             self.输出日志(f"下载章节 {章节标题} 时出错: {str(e)}", True)
+            return None
 
 # 修改原有的测试函数
 def test_打开辣文小说18首页():
@@ -500,65 +567,87 @@ def 生成TXT文件(小说标题, 作者, 小说介绍, 小说目录, 下载目�
     打印成功(f"TXT文件已生成：{txt文件路径}")
     打印信息("文件大小", f"{os.path.getsize(txt文件路径) / 1024 / 1024:.2f} MB")
 
-def 生成EPUB文件(小说标题, 作者, 小说介绍, 小说目录, 下载目录):
-    # 创建EPUB文件
-    书 = epub.EpubBook()
-    
-    # 设置元数据
-    书.set_identifier(f'id-{小说标题}')
-    书.set_title(小说标题)
-    书.set_language('zh-CN')
-    书.add_author(作者)
-    
-    # 添加CSS样式
-    样式 = '''
-    @namespace epub "http://www.idpf.org/2007/ops";
-    body {
-        font-family: SimSun, serif;
-        line-height: 1.6;
-        padding: 5%;
-    }
-    h1, h2 {
-        text-align: center;
-        font-weight: bold;
-    }
-    p {
-        text-indent: 2em;
-        margin: 0.5em 0;
-    }
-    '''
-    nav_css = epub.EpubItem(uid="style_nav", file_name="style/nav.css", media_type="text/css", content=样式)
-    书.add_item(nav_css)
-    
-    # 创建简介章节
-    简介章节 = epub.EpubHtml(title='简介', file_name='intro.xhtml', lang='zh-CN')
-    简介章节.content = f'<h1>{小说标题}</h1>\n<p>作者：{作者}</p>\n<h2>简介</h2>\n<p>{小说介绍.replace("\n", "</p><p>")}</p>'
-    书.add_item(简介章节)
-    
-    # 创建章节
-    epub章节列表 = [简介章节]
-    for i, 章节 in enumerate(小说目录):
-        c = epub.EpubHtml(title=章节['title'], file_name=f'chap_{i+1}.xhtml', lang='zh-CN')
-        内容 = 章节['content'].replace("\n", "</p><p>")
-        c.content = f'<h2>{章节["title"]}</h2>\n<p>{内容}</p>'
-        书.add_item(c)
-        epub章节列表.append(c)
-    
-    # 定义目录
-    书.toc = epub章节列表
-    
-    # 添加NCX和导航文件
-    书.add_item(epub.EpubNcx())
-    书.add_item(epub.EpubNav())
-    
-    # 定义书脊
-    书.spine = ['nav'] + epub章节列表
-    
-    # 生成EPUB文件路径
-    epub文件路径 = os.path.join(下载目录, f"{小说标题}.epub")
-    
-    # 写入EPUB文件
-    epub.write_epub(epub文件路径, 书, {})
-    
-    打印成功(f"EPUB文件已生成：{epub文件路径}")
-    打印信息("文件大小", f"{os.path.getsize(epub文件路径) / 1024 / 1024:.2f} MB")
+def 生成EPUB文件(小说标题, 作者, 小说介绍, 小说目录, 下载目录, 封面路径=None):
+    try:
+        # 创建EPUB文件
+        书 = epub.EpubBook()
+        
+        # 设置元数据
+        书.set_identifier(f'id-{小说标题}')
+        书.set_title(小说标题)
+        书.set_language('zh-CN')
+        书.add_author(作者)
+        
+        # 添加封面图片
+        if 封面路径 and os.path.exists(封面路径):
+            with open(封面路径, 'rb') as f:
+                封面数据 = f.read()
+            封面 = epub.EpubItem(
+                uid='cover',
+                file_name='cover.jpg',
+                media_type='image/jpeg',
+                content=封面数据
+            )
+            书.add_item(封面)
+            书.set_cover('cover.jpg', 封面数据)
+        
+        # 添加CSS样式
+        样式 = '''
+        @namespace epub "http://www.idpf.org/2007/ops";
+        body {
+            font-family: SimSun, serif;
+            line-height: 1.6;
+            padding: 5%;
+        }
+        h1, h2 {
+            text-align: center;
+            font-weight: bold;
+        }
+        p {
+            text-indent: 2em;
+            margin: 0.5em 0;
+        }
+        '''
+        nav_css = epub.EpubItem(uid="style_nav", file_name="style/nav.css", media_type="text/css", content=样式)
+        书.add_item(nav_css)
+        
+        # 创建简介章节
+        简介章节 = epub.EpubHtml(title='简介', file_name='intro.xhtml', lang='zh-CN')
+        简介章节.content = f'<h1>{小说标题}</h1>\n<p>作者：{作者}</p>\n<h2>简介</h2>\n<p>{小说介绍.replace("\n", "</p><p>")}</p>'
+        书.add_item(简介章节)
+        
+        # 创建章节
+        epub章节列表 = [简介章节]
+        for i, 章节 in enumerate(小说目录):
+            # 使用序号作为文件名前缀，确保正确排序
+            c = epub.EpubHtml(
+                title=章节['title'],
+                file_name=f'chap_{i+1:04d}.xhtml',  # 使用4位数字序号
+                lang='zh-CN'
+            )
+            内容 = 章节['content'].replace("\n", "</p><p>")
+            c.content = f'<h2>{章节["title"]}</h2>\n<p>{内容}</p>'
+            书.add_item(c)
+            epub章节列表.append(c)
+        
+        # 定义目录，确保按照章节顺序排列
+        书.toc = epub章节列表
+        
+        # 添加NCX和导航文件
+        书.add_item(epub.EpubNcx())
+        书.add_item(epub.EpubNav())
+        
+        # 定义书脊，确保按照章节顺序排列
+        书.spine = ['nav'] + epub章节列表
+        
+        # 生成EPUB文件路径
+        epub文件路径 = os.path.join(下载目录, f"{小说标题}.epub")
+        
+        # 写入EPUB文件
+        epub.write_epub(epub文件路径, 书, {})
+        
+        打印成功(f"EPUB文件已生成：{epub文件路径}")
+        打印信息("文件大小", f"{os.path.getsize(epub文件路径) / 1024 / 1024:.2f} MB")
+        
+    except Exception as e:
+        打印错误(f"生成EPUB文件时出错: {str(e)}")
