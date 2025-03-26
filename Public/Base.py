@@ -22,6 +22,10 @@ class  web二次封装:   # 类名     里面的成员 有函数  def就是函�
                 chrome_options = ChromeOptions()
                 chrome_options.add_argument('--disable-gpu')  # 禁用GPU加速
                 chrome_options.add_argument('--no-sandbox')  # 禁用沙盒模式
+                chrome_options.add_argument('--ignore-certificate-errors')  # 忽略SSL证书错误
+                chrome_options.add_argument('--ignore-ssl-errors')  # 忽略SSL错误
+                chrome_options.add_argument('--allow-insecure-localhost')  # 允许不安全的本地主机
+                chrome_options.add_argument('--allow-running-insecure-content')  # 允许运行不安全内容
                 if 是否无头:
                     chrome_options.add_argument('--headless')  # 无头模式
                 
@@ -34,6 +38,10 @@ class  web二次封装:   # 类名     里面的成员 有函数  def就是函�
         elif name == 'firefox':
             from selenium.webdriver.firefox.options import Options as FirefoxOptions
             firefox_options = FirefoxOptions()
+            firefox_options.add_argument('--ignore-certificate-errors')  # 忽略SSL证书错误
+            firefox_options.add_argument('--ignore-ssl-errors')  # 忽略SSL错误
+            firefox_options.add_argument('--allow-insecure-localhost')  # 允许不安全的本地主机
+            firefox_options.add_argument('--allow-running-insecure-content')  # 允许运行不安全内容
             if 是否无头:
                 firefox_options.add_argument('--headless')
             self.driver = webdriver.Firefox(options=firefox_options)
@@ -41,6 +49,10 @@ class  web二次封装:   # 类名     里面的成员 有函数  def就是函�
         elif name == 'edge':
             from selenium.webdriver.edge.options import Options as EdgeOptions
             edge_options = EdgeOptions()
+            edge_options.add_argument('--ignore-certificate-errors')  # 忽略SSL证书错误
+            edge_options.add_argument('--ignore-ssl-errors')  # 忽略SSL错误
+            edge_options.add_argument('--allow-insecure-localhost')  # 允许不安全的本地主机
+            edge_options.add_argument('--allow-running-insecure-content')  # 允许运行不安全内容
             if 是否无头:
                 edge_options.add_argument('--headless')
             self.driver = webdriver.Edge(options=edge_options)
@@ -48,6 +60,10 @@ class  web二次封装:   # 类名     里面的成员 有函数  def就是函�
         else:
             from selenium.webdriver.edge.options import Options as EdgeOptions
             edge_options = EdgeOptions()
+            edge_options.add_argument('--ignore-certificate-errors')  # 忽略SSL证书错误
+            edge_options.add_argument('--ignore-ssl-errors')  # 忽略SSL错误
+            edge_options.add_argument('--allow-insecure-localhost')  # 允许不安全的本地主机
+            edge_options.add_argument('--allow-running-insecure-content')  # 允许运行不安全内容
             if 是否无头:
                 edge_options.add_argument('--headless')
             self.driver = webdriver.Edge(options=edge_options)

@@ -23,7 +23,9 @@ class  日志记录类:
         # 3. 创建一个handler，用于写入日志文件
         # 3.1 创建一个日志文件
         日志文件路径 = os.getcwd()+"/Logs/selenium_" + time.strftime("%Y_%m_%d") + ".log"
-        self.file_handler = logging.FileHandler(日志文件路径,encoding="utf-8")
+        # 确保日志目录存在
+        os.makedirs(os.path.dirname(日志文件路径), exist_ok=True)
+        self.file_handler = logging.FileHandler(日志文件路径, encoding="utf-8")
         # 3.2 设置日志的级别
         self.file_handler.setLevel(logging.INFO)
         # 4. 定义handler的输出格式
@@ -37,11 +39,52 @@ class  日志记录类:
         控制台.setFormatter(formatter)
         self.logger.addHandler(控制台)
         
+        # 7. 添加UI回调函数
+        self.ui_callback = None
+
+    def set_ui_callback(self, callback):
+        """设置UI回调函数"""
+        self.ui_callback = callback
+
+    def __del__(self):
+        """确保在对象销毁时正确关闭文件流"""
+        try:
+            if hasattr(self, 'file_handler'):
+                self.file_handler.close()
+        except Exception:
+            pass
+
+    def _ensure_handler(self):
+        """确保文件处理器是有效的"""
+        try:
+            if not self.file_handler.stream or self.file_handler.stream.closed:
+                self.file_handler.close()
+                self.file_handler = logging.FileHandler(os.getcwd()+"/Logs/selenium_" + time.strftime("%Y_%m_%d") + ".log", encoding="utf-8")
+                self.file_handler.setLevel(logging.INFO)
+                formatter = logging.Formatter('%(asctime)s  %(name)s  %(levelname)s  %(message)s')
+                self.file_handler.setFormatter(formatter)
+                self.logger.addHandler(self.file_handler)
+        except Exception:
+            pass
 
     def info(self, msg):
         """记录消息级别"""
-        self.logger.info(msg)
+        try:
+            self._ensure_handler()
+            self.logger.info(msg)
+            # 调用UI回调函数
+            if self.ui_callback:
+                self.ui_callback(msg, False)
+        except Exception:
+            pass
 
     def error(self, msg):
         """记录错误级别"""
-        self.logger.error(msg)
+        try:
+            self._ensure_handler()
+            self.logger.error(msg)
+            # 调用UI回调函数
+            if self.ui_callback:
+                self.ui_callback(msg, True)
+        except Exception:
+            pass

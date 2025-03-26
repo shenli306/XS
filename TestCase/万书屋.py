@@ -16,26 +16,474 @@ from tqdm import tqdm
 import logging
 import sys
 import warnings
+import uuid
 
 # 屏蔽警告信息
 warnings.filterwarnings("ignore")
 
 # 配置日志，将selenium和其他库的日志级别设置为ERROR或更高
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.ERROR, format='%(message)s')
 
 # 屏蔽selenium日志
 selenium_logger = logging.getLogger('selenium')
 selenium_logger.setLevel(logging.ERROR)
+selenium_logger.propagate = False
 
 # 屏蔽urllib3日志
 urllib3_logger = logging.getLogger('urllib3')
 urllib3_logger.setLevel(logging.ERROR)
+urllib3_logger.propagate = False
+
+# 创建自定义日志记录器
+novel_logger = logging.getLogger('novel_downloader')
+novel_logger.setLevel(logging.INFO)
+novel_logger.propagate = False
+
+# 清除所有处理器
+for handler in novel_logger.handlers[:]:
+    novel_logger.removeHandler(handler)
+
+# 添加控制台处理器
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(logging.Formatter('%(message)s'))
+novel_logger.addHandler(console_handler)
 
 # 初始化colorama
 colorama.init(autoreset=True)
 
 # 无头模式设置（True为启用无头模式，False为正常显示浏览器）
 无头模式 = True
+
+# 浏览器类定义
+class 浏览器类:
+    def __init__(self):
+        self.driver = None
+        self.browser = None
+    
+    def 启动浏览器(self):
+        # 使用web二次封装创建浏览器实例
+        self.browser = web二次封装('edge', 是否无头=True)
+        self.driver = self.browser.driver
+    
+    def 打开地址(self, 地址):
+        self.browser.打开地址(地址)
+    
+    def 输入内容(self, 定位方式, 定位值, 内容):
+        self.browser.输入内容(定位方式, 定位值, 内容)
+    
+    def 点击元素(self, 定位方式, 定位值):
+        self.browser.点击元素(定位方式, 定位值)
+    
+    def 关闭浏览器(self):
+        if self.browser:
+            self.browser.关闭浏览器()
+            
+    def execute_cdp_cmd(self, cmd, params):
+        if self.driver:
+            return self.driver.execute_cdp_cmd(cmd, params)
+
+class 万书屋下载器:
+    def __init__(self):
+        self.浏览器 = None
+        # 使用绝对路径作为下载目录
+        self.下载目录 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'downloads')
+        if not os.path.exists(self.下载目录):
+            os.makedirs(self.下载目录)
+        # 初始化日志回调
+        self.log_callback = None
+        self.progress_callback = None
+        # 初始化时创建浏览器实例
+        try:
+            self.浏览器 = 浏览器类()
+            self.浏览器.启动浏览器()
+            # 设置忽略SSL证书错误
+            self.浏览器.execute_cdp_cmd('Security.setIgnoreCertificateErrors', {'ignore': True})
+            # 设置忽略SSL错误
+            self.浏览器.execute_cdp_cmd('Network.setBypassServiceWorker', {'bypass': True})
+        except Exception as e:
+            self.输出日志(f"初始化浏览器失败: {str(e)}", True)
+            raise
+    
+    def __del__(self):
+        # 类销毁时关闭浏览器
+        if self.浏览器:
+            try:
+                self.浏览器.关闭浏览器()
+            except Exception as e:
+                self.输出日志(f"关闭浏览器失败: {str(e)}", True)
+    
+    def 输出日志(self, 消息, 是否错误=False):
+        try:
+            if self.log_callback:
+                self.log_callback(消息, 是否错误)
+            else:
+                if 是否错误:
+                    novel_logger.error(f"{Fore.RED}{消息}{Style.RESET_ALL}")
+                else:
+                    novel_logger.info(消息)
+        except Exception as e:
+            print(f"日志输出失败: {str(e)}")
+    
+    def 搜索小说(self, 搜索关键词):
+        try:
+            if not self.浏览器:
+                raise Exception("浏览器未初始化")
+                
+            self.输出日志(f"开始搜索小说：{搜索关键词}")
+            
+            # 使用已存在的浏览器实例
+            self.浏览器.打开地址('https://www.rrssk.com/?165')
+            time.sleep(2)  # 等待页面加载
+            
+            self.浏览器.输入内容('class','input', 搜索关键词)
+            self.浏览器.点击元素('class','btnSearch')
+            time.sleep(2)  # 等待搜索结果加载
+    
+            # 获取搜索结果页面源码
+            搜索结果页面 = self.浏览器.driver.page_source
+            if not 搜索结果页面:
+                raise Exception("获取页面源码失败")
+                
+            搜索结果soup = BeautifulSoup(搜索结果页面, 'html.parser')
+    
+            # 获取搜索结果列表
+            搜索结果列表 = 搜索结果soup.select('.list.dList > ul > li')
+            if not 搜索结果列表:
+                搜索结果列表 = 搜索结果soup.select('.book-img-text .bookbox')
+            if not 搜索结果列表:
+                搜索结果列表 = 搜索结果soup.select('.result-list .result-item')
+            if not 搜索结果列表:
+                搜索结果列表 = 搜索结果soup.select('.books-list .books-item')
+            if not 搜索结果列表:
+                搜索结果列表 = 搜索结果soup.select('li.cc')
+            if not 搜索结果列表:
+                搜索结果列表 = 搜索结果soup.select('.novelslist2 li')
+            if not 搜索结果列表:
+                搜索结果列表 = 搜索结果soup.select('.conList .info')
+            if not 搜索结果列表:
+                搜索结果列表 = 搜索结果soup.select('.blue.btnBlue2')
+
+            if not 搜索结果列表:
+                self.输出日志("未找到任何搜索结果", True)
+                return []
+
+            # 处理搜索结果
+            所有搜索结果 = []
+            for 小说元素 in 搜索结果列表:
+                try:
+                    # 尝试获取小说名和链接
+                    小说名元素 = (小说元素.select_one('.txtb .name a') or
+                             小说元素.select_one('.name.font18 a') or
+                             小说元素.select_one('h3 a') or 
+                             小说元素.select_one('h4 a') or 
+                             小说元素.select_one('.bookname a') or 
+                             小说元素.select_one('a.blue') or
+                             小说元素.select_one('.s2 a') or
+                             小说元素.select_one('.name a') or
+                             小说元素.select_one('a[title]'))
+                    
+                    if 小说名元素:
+                        小说名 = 小说名元素.text.strip()
+                        小说链接 = 小说名元素['href']
+                        
+                        # 尝试获取作者
+                        作者元素 = (小说元素.select_one('.info dl:first-child dd a') or 
+                                小说元素.select_one('.dlS dd a') or
+                                小说元素.select_one('.author') or 
+                                小说元素.select_one('.bookauthor') or
+                                小说元素.select_one('.s4') or
+                                小说元素.select_one('.info .author'))
+                        作者 = 作者元素.text.strip() if 作者元素 else "未知"
+                        
+                        # 尝试获取最新章节
+                        最新章节元素 = 小说元素.select_one('.info dl:last-child dd a')
+                        最新章节 = 最新章节元素.text.strip() if 最新章节元素 else "未知"
+                        
+                        # 尝试获取简介
+                        简介元素 = 小说元素.select_one('.intro')
+                        简介 = 简介元素.text.strip() if 简介元素 else "暂无简介"
+                        简介 = 简介[:50] + "..." if len(简介) > 50 else 简介
+                        
+                        # 清理小说名和作者
+                        小说名 = 小说名.replace("[在线阅读]", "").strip()
+                        if "作者：" in 作者:
+                            作者 = 作者.replace("作者：", "").strip()
+                        
+                        # 确保链接是完整的
+                        if not 小说链接.startswith('http'):
+                            基础URL = 'https://www.shuwuwan.com'
+                            小说链接 = f"{基础URL}{小说链接}" if 小说链接.startswith('/') else f"{基础URL}/{小说链接}"
+                        
+                        # 清理链接中的日志信息
+                        小说链接 = 小说链接.split(',')[0].strip()  # 移除逗号后的所有内容
+                        小说链接 = 小说链接.split('耗时')[0].strip()  # 移除"耗时"后的所有内容
+                        
+                        所有搜索结果.append((小说名, 小说链接, 作者, 最新章节, 简介))
+                        self.输出日志(f"找到小说：{小说名} - {作者}")
+                except Exception as e:
+                    self.输出日志(f"处理搜索结果时出错：{str(e)}", True)
+                    continue
+
+            if not 所有搜索结果:
+                self.输出日志("未能成功解析任何搜索结果", True)
+            else:
+                self.输出日志(f"共找到 {len(所有搜索结果)} 个搜索结果")
+                
+            return 所有搜索结果
+            
+        except Exception as e:
+            self.输出日志(f"搜索小说时出错：{str(e)}", True)
+            return []
+    
+    def 下载小说(self, 小说链接, 下载格式="epub"):
+        try:
+            if not self.浏览器:
+                raise Exception("浏览器未初始化")
+                
+            self.输出日志(f"开始下载小说，链接：{小说链接}")
+            
+            # 使用已存在的浏览器实例
+            self.浏览器.打开地址(小说链接)
+            time.sleep(2)  # 等待页面加载
+            
+            # 获取小说信息
+            页面源码 = self.浏览器.driver.page_source
+            if not 页面源码:
+                raise Exception("获取页面源码失败")
+                
+            soup = BeautifulSoup(页面源码, 'html.parser')
+            
+            # 获取小说标题
+            小说标题元素 = soup.select_one('.conL .txtb .tit .name')
+            if not 小说标题元素:
+                小说标题元素 = soup.select_one('.book-info h1')
+            if not 小说标题元素:
+                小说标题元素 = soup.select_one('.book-title')
+            if not 小说标题元素:
+                小说标题元素 = soup.select_one('.book-name')
+            if not 小说标题元素:
+                raise Exception("无法获取小说标题")
+            小说标题 = 小说标题元素.text.strip()
+            
+            # 获取作者
+            作者元素 = soup.select_one('.conL .txtb .tit .author a')
+            if not 作者元素:
+                作者元素 = soup.select_one('.book-info .author')
+            if not 作者元素:
+                作者元素 = soup.select_one('.book-author')
+            if not 作者元素:
+                作者元素 = soup.select_one('.author-name')
+            if not 作者元素:
+                raise Exception("无法获取作者信息")
+            作者 = 作者元素.text.strip()
+            
+            # 获取小说介绍
+            小说介绍元素 = soup.select_one('.conL .txtb .intro')
+            if not 小说介绍元素:
+                小说介绍元素 = soup.select_one('.book-info .intro')
+            if not 小说介绍元素:
+                小说介绍元素 = soup.select_one('.book-description')
+            if not 小说介绍元素:
+                小说介绍元素 = soup.select_one('.book-intro')
+            if not 小说介绍元素:
+                raise Exception("无法获取小说介绍")
+            小说介绍 = 小说介绍元素.text.strip()
+            
+            self.输出日志(f"获取到小说信息：《{小说标题}》 作者：{作者}")
+            
+            # 下载封面图片
+            try:
+                封面元素 = soup.select_one('.picb .pic img')
+                if not 封面元素:
+                    封面元素 = soup.select_one('.book-img img')
+                if not 封面元素:
+                    封面元素 = soup.select_one('.book-cover img')
+                if not 封面元素:
+                    封面元素 = soup.select_one('.novel-cover img')
+                
+                if 封面元素 and 封面元素.get('src'):
+                    封面URL = 封面元素['src']
+                    if not 封面URL.startswith('http'):
+                        基础URL = 'https://www.shuwuwan.com'
+                        封面URL = f"{基础URL}{封面URL}"
+                    
+                    # 下载封面图片
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    }
+                    response = requests.get(封面URL, headers=headers, verify=False)
+                    if response.status_code == 200:
+                        封面路径 = f'{self.下载目录}/{小说标题}_封面.jpg'
+                        with open(封面路径, 'wb') as f:
+                            f.write(response.content)
+                        self.输出日志("封面图片下载成功")
+                    else:
+                        self.输出日志("封面图片下载失败：HTTP状态码不为200", True)
+            except Exception as e:
+                self.输出日志(f"下载封面失败：{str(e)}", True)
+            
+            # 获取章节列表
+            章节列表元素 = soup.select('.chapterList .list ul li .name a')
+            if not 章节列表元素:
+                章节列表元素 = soup.select('.conL .txtb .list ul li a')
+            if not 章节列表元素:
+                章节列表元素 = soup.select('.chapter-list li a')
+            if not 章节列表元素:
+                章节列表元素 = soup.select('.book-chapter-list li a')
+            if not 章节列表元素:
+                章节列表元素 = soup.select('.novel-chapter-list li a')
+            if not 章节列表元素:
+                章节列表元素 = soup.select('.chapter a')
+            
+            if not 章节列表元素:
+                raise Exception("无法获取章节列表")
+                
+            self.输出日志(f"获取到 {len(章节列表元素)} 个章节")
+            
+            # 创建章节列表并排序
+            章节列表 = []
+            for 章节 in 章节列表元素:
+                章节名 = 章节.text.strip()
+                章节链接 = 章节['href']
+                if not 章节链接.startswith('http'):
+                    章节链接 = f"https://www.shuwuwan.com{章节链接}"
+                
+                # 从URL中提取章节号
+                try:
+                    章节号 = int(章节链接.split('-')[-1].replace('.html', ''))
+                except:
+                    章节号 = len(章节列表) + 1
+                章节列表.append((章节号, 章节名, 章节链接))
+            
+            # 按章节号排序
+            章节列表.sort(key=lambda x: x[0])
+            
+            # 创建小说内容目录
+            小说章节目录 = f'{self.下载目录}/{小说标题}_章节'
+            if not os.path.exists(小说章节目录):
+                os.makedirs(小说章节目录)
+            
+            # 下载章节内容
+            成功下载章节数 = 0
+            总章节数 = len(章节列表)
+            
+            for idx, (章节号, 章节名, 章节链接) in enumerate(章节列表):
+                try:
+                    self.浏览器.打开地址(章节链接)
+                    time.sleep(0.5)  # 等待页面加载
+                    
+                    章节页面源码 = self.浏览器.driver.page_source
+                    章节soup = BeautifulSoup(章节页面源码, 'html.parser')
+                    
+                    章节内容元素 = 章节soup.select_one('#content')
+                    if not 章节内容元素:
+                        章节内容元素 = 章节soup.select_one('.chapter-content')
+                    if not 章节内容元素:
+                        章节内容元素 = 章节soup.select_one('.novel-content')
+                    if not 章节内容元素:
+                        章节内容元素 = 章节soup.select_one('.book-content')
+                    if not 章节内容元素:
+                        章节内容元素 = 章节soup.select_one('.content')
+                    
+                    if 章节内容元素:
+                        章节内容 = 章节内容元素.text.strip()
+                        
+                        # 清理章节内容
+                        章节内容 = self.清理章节内容(章节内容)
+                        
+                        # 保存章节内容
+                        章节文件名 = f"{章节号:04d}_{章节名}.txt"
+                        with open(f'{小说章节目录}/{章节文件名}', 'w', encoding='utf-8') as f:
+                            f.write(f"{章节名}\n\n")
+                            f.write(章节内容)
+                        
+                        成功下载章节数 += 1
+                        
+                        # 发送进度信号
+                        if hasattr(self, 'progress_callback'):
+                            self.progress_callback(idx + 1, 总章节数)
+                        
+                except Exception as e:
+                    self.输出日志(f"下载章节 {章节名} 失败：{str(e)}", True)
+                    continue
+            
+            # 检查是否成功下载了足够的章节
+            if 成功下载章节数 == 0:
+                raise Exception("未能成功下载任何章节")
+            
+            self.输出日志(f"成功下载 {成功下载章节数}/{总章节数} 个章节")
+            
+            # 根据选择的格式生成文件
+            if 下载格式.lower() == "txt":
+                生成TXT文件(小说标题, 作者, 小说介绍, 小说章节目录, self.下载目录)
+            else:
+                生成EPUB文件(小说标题, 作者, 小说介绍, 小说章节目录, self.下载目录)
+            
+            # 验证文件是否成功生成
+            目标文件 = f'{self.下载目录}/{小说标题}.{"txt" if 下载格式.lower() == "txt" else "epub"}'
+            if not os.path.exists(目标文件):
+                raise Exception(f"未能成功生成{下载格式.upper()}文件")
+            
+            self.输出日志(f"小说下载完成：{目标文件}")
+            return True
+            
+        except Exception as e:
+            self.输出日志(f"下载小说时出错：{str(e)}", True)
+            return False
+
+    def 清理章节内容(self, 章节内容):
+        # 清理章节内容
+        章节内容 = 章节内容.replace('    ', '\n\n')
+        
+        # 清洗内容
+        需要移除的内容 = [
+            "(http://www.shuwuwan.com/book/F72W-1.html)",
+            "章节错误,点此举报(免注册)我们会尽快处理.举报后请耐心等待,并刷新页面。",
+            "请记住本书首发域名：http://www.shuwuwan.com",
+            "www.shuwuwan.com",
+            "shuwuwan.com",
+            "书屋湾",
+            "首发域名",
+            "章节错误",
+            "点此举报",
+            "免注册",
+            "耐心等待",
+            "刷新页面"
+        ]
+        
+        for 广告内容 in 需要移除的内容:
+            章节内容 = 章节内容.replace(广告内容, "")
+        
+        # 清理章节末尾的URL
+        章节内容 = re.sub(r'https?://[^\s<>"]+|www\.[^\s<>"]+', '', 章节内容)
+        章节内容 = re.sub(r'[a-zA-Z0-9-]+\.html', '', 章节内容)
+        
+        # 清理所有类型的括号及其内容
+        章节内容 = re.sub(r'\([^)]*\)', '', 章节内容)  # 清理英文括号
+        章节内容 = re.sub(r'（[^）]*）', '', 章节内容)  # 清理中文括号
+        章节内容 = re.sub(r'【[^】]*】', '', 章节内容)  # 清理中文方括号
+        章节内容 = re.sub(r'\[[^\]]*\]', '', 章节内容)  # 清理英文方括号
+        章节内容 = re.sub(r'「[^」]*」', '', 章节内容)  # 清理中文书名号
+        章节内容 = re.sub(r'『[^』]*』', '', 章节内容)  # 清理中文双书名号
+        
+        # 清理单个括号
+        章节内容 = re.sub(r'[\(（【\[「『]', '', 章节内容)  # 清理左括号
+        章节内容 = re.sub(r'[\)）】\]」』]', '', 章节内容)  # 清理右括号
+        
+        # 清理多余的空行和空格
+        章节内容 = re.sub(r'\n\s*\n\s*\n+', '\n\n', 章节内容)  # 清理多余空行
+        章节内容 = re.sub(r'[ \t]+', ' ', 章节内容)  # 清理多余空格
+        章节内容 = re.sub(r'\n\s+', '\n', 章节内容)  # 清理行首空格
+        章节内容 = re.sub(r'\s+\n', '\n', 章节内容)  # 清理行尾空格
+        
+        # 清理等号分隔线
+        章节内容 = re.sub(r'=+', '', 章节内容)
+        
+        # 清理章节内容首尾的空白字符
+        章节内容 = 章节内容.strip()
+        
+        return 章节内容
 
 # 重定向标准错误到空设备
 class 错误抑制:
@@ -48,717 +496,285 @@ class 错误抑制:
         sys.stderr.close()
         sys.stderr = self.原始错误输出
 
-# 美化打印函数
-def 打印标题(文本):
+# 修改打印函数
+def 打印标题(文本, 日志回调=None):
     边框 = "═" * (len(文本) + 4)
-    print(f"\n{Fore.CYAN}{边框}")
-    print(f"║ {Fore.YELLOW}{Style.BRIGHT}{文本} {Fore.CYAN}║")
-    print(f"{边框}{Style.RESET_ALL}\n")
+    消息 = f"\n{边框}\n║ {文本} ║\n{边框}\n"
+    if 日志回调:
+        日志回调(消息, False)
+    else:
+        print(f"\n{Fore.CYAN}{边框}")
+        print(f"║ {Fore.YELLOW}{Style.BRIGHT}{文本} {Fore.CYAN}║")
+        print(f"{边框}{Style.RESET_ALL}\n")
 
-def 打印信息(标签, 内容, 颜色=Fore.GREEN):
-    print(f"{Fore.WHITE}{标签}: {颜色}{内容}{Style.RESET_ALL}")
+def 打印信息(标签, 内容, 颜色=Fore.GREEN, 日志回调=None):
+    消息 = f"{标签}: {内容}"
+    if 日志回调:
+        日志回调(消息, False)
+    else:
+        print(f"{Fore.WHITE}{标签}: {颜色}{内容}{Style.RESET_ALL}")
 
-def 打印成功(文本):
-    print(f"{Fore.GREEN}✓ {文本}{Style.RESET_ALL}")
+def 打印成功(文本, 日志回调=None):
+    消息 = f"✓ {文本}"
+    if 日志回调:
+        日志回调(消息, False)
+    else:
+        print(f"{Fore.GREEN}✓ {文本}{Style.RESET_ALL}")
 
-def 打印警告(文本):
-    print(f"{Fore.YELLOW}⚠ {文本}{Style.RESET_ALL}")
+def 打印警告(文本, 日志回调=None):
+    消息 = f"⚠ {文本}"
+    if 日志回调:
+        日志回调(消息, False)
+    else:
+        print(f"{Fore.YELLOW}⚠ {文本}{Style.RESET_ALL}")
     
-def 打印错误(文本):
-    print(f"{Fore.RED}✗ {文本}{Style.RESET_ALL}")
+def 打印错误(文本, 日志回调=None):
+    消息 = f"✗ {文本}"
+    if 日志回调:
+        日志回调(消息, True)
+    else:
+        print(f"{Fore.RED}✗ {文本}{Style.RESET_ALL}")
 
-def 打印分隔线():
-    print(f"{Fore.BLUE}{'─' * 50}{Style.RESET_ALL}")
+def 打印分隔线(日志回调=None):
+    分隔线 = "─" * 50
+    if 日志回调:
+        日志回调(分隔线, False)
+    else:
+        print(f"{Fore.BLUE}{分隔线}{Style.RESET_ALL}")
 
 #打开万书屋首页
 def test_打开万书屋首页():
     # 默认使用无头模式
     打印标题("万书屋小说下载器")
-    print(f"{Fore.CYAN}使用无头模式启动浏览器...{Style.RESET_ALL}")
     
-    # 使用错误抑制上下文管理器屏蔽浏览器启动日志
-    with 错误抑制():
-        浏览器=web二次封装('edge', 是否无头=True)
-        浏览器.打开地址('https://www.rrssk.com/?165')
-    
-    # 从终端获取用户输入
-    搜索关键词 = input(f"{Fore.YELLOW}请输入要搜索的书籍名称：{Style.RESET_ALL}")
-    
-    with 错误抑制():
-        浏览器.输入内容('class','input',搜索关键词)
-        浏览器.点击元素('class','btnSearch')
-        # 不要立即点击第一个结果，而是显示所有搜索结果
-        # 浏览器.点击元素('class','btnBlue2')
-    
-    # 创建保存目录 - 修改为downloads
+    # 创建下载目录
     下载目录 = 'downloads'
     if not os.path.exists(下载目录):
         os.makedirs(下载目录)
+        
+    # 创建浏览器实例
+    浏览器 = 浏览器类()
+    浏览器.启动浏览器()
     
-    # 获取搜索结果页面源码
-    搜索结果页面 = 浏览器.driver.page_source
-    搜索结果soup = BeautifulSoup(搜索结果页面, 'html.parser')
-    
-    # 获取搜索结果列表
-    搜索结果列表 = 搜索结果soup.select('.list.dList > ul > li')
-    if not 搜索结果列表:
-        搜索结果列表 = 搜索结果soup.select('.book-img-text .bookbox')
-    if not 搜索结果列表:
-        搜索结果列表 = 搜索结果soup.select('.result-list .result-item')
-    if not 搜索结果列表:
-        搜索结果列表 = 搜索结果soup.select('.books-list .books-item')
-    if not 搜索结果列表:
-        搜索结果列表 = 搜索结果soup.select('li.cc')
-    # 万书屋特定的选择器
-    if not 搜索结果列表:
-        搜索结果列表 = 搜索结果soup.select('.novelslist2 li')
-    if not 搜索结果列表:
-        搜索结果列表 = 搜索结果soup.select('.conList .info')
-    if not 搜索结果列表:
-        搜索结果列表 = 搜索结果soup.select('.blue.btnBlue2')
-    if not 搜索结果列表:
-        # 如果实在找不到结果，记录页面以便分析
-        with open('搜索结果页面.html', 'w', encoding='utf-8') as f:
-            f.write(搜索结果页面)
-        # 记录日志但尝试直接点击第一个结果
-        打印警告(f"无法找到搜索结果列表，尝试直接点击第一个结果")
-        try:
-            with 错误抑制():
-                浏览器.点击元素('class', 'btnBlue2')
-                time.sleep(1)  # 等待页面加载
-                # 获取当前页面URL和内容
-                小说页面URL = 浏览器.driver.current_url
-                页面源码 = 浏览器.driver.page_source
-                soup = BeautifulSoup(页面源码, 'html.parser')
-                # 继续原来的流程
-                打印警告(f"已自动选择第一个搜索结果")
-                # 获取小说标题
-                小说标题 = soup.select_one('.conL .txtb .tit .name').text.strip()
-                # 获取作者
-                作者 = soup.select_one('.conL .txtb .tit .author a').text.strip()
-                # 从这里继续原代码流程
-                # 跳过搜索结果显示和用户选择部分
-                return
-        except Exception as e:
-            打印错误(f"尝试点击第一个结果失败：{e}")
-            打印错误(f"未找到相关小说，搜索页面已保存到'搜索结果页面.html'")
-            浏览器.关闭浏览器()
-            exit()
-
-    # 如果找到了搜索结果列表但是为空
-    if len(搜索结果列表) == 0:
-        打印错误(f"搜索结果为空，请尝试其他关键词")
-        浏览器.关闭浏览器()
-        exit()
-
-    # 尝试获取搜索结果总数信息
-    搜索结果总数 = "未知"
-    搜索结果信息 = 搜索结果soup.select_one('.rankIBox.searchIBox .tit .name')
-    if 搜索结果信息:
-        搜索结果文本 = 搜索结果信息.text.strip()
-        总数匹配 = re.search(r'为您找到 .*?(\d+).*? 个', 搜索结果文本)
-        if 总数匹配:
-            搜索结果总数 = 总数匹配.group(1)
-
-    打印成功(f"找到 {len(搜索结果列表)} 个搜索结果，总共约 {搜索结果总数} 个结果")
-
-    # 处理搜索结果
-    所有搜索结果 = []
-    for 小说元素 in 搜索结果列表:
-        try:
-            # 尝试获取小说名和链接 - 万书屋特定的选择器
-            小说名元素 = (小说元素.select_one('.txtb .name a') or
-                     小说元素.select_one('.name.font18 a') or
-                     小说元素.select_one('h3 a') or 
-                     小说元素.select_one('h4 a') or 
-                     小说元素.select_one('.bookname a') or 
-                     小说元素.select_one('a.blue') or
-                     小说元素.select_one('.s2 a') or
-                     小说元素.select_one('.name a') or
-                     小说元素.select_one('a[title]'))
-            
-            if 小说名元素:
-                小说名 = 小说名元素.text.strip()
-                小说链接 = 小说名元素['href']
-                
-                # 尝试获取作者
-                作者元素 = (小说元素.select_one('.info dl:first-child dd a') or 
-                        小说元素.select_one('.dlS dd a') or
-                        小说元素.select_one('.author') or 
-                        小说元素.select_one('.bookauthor') or
-                        小说元素.select_one('.s4') or
-                        小说元素.select_one('.info .author'))
-                作者 = 作者元素.text.strip() if 作者元素 else "未知"
-                
-                # 尝试获取最新章节
-                最新章节元素 = 小说元素.select_one('.info dl:last-child dd a')
-                最新章节 = 最新章节元素.text.strip() if 最新章节元素 else "未知"
-                
-                # 尝试获取简介
-                简介元素 = 小说元素.select_one('.intro')
-                简介 = 简介元素.text.strip() if 简介元素 else "暂无简介"
-                简介 = 简介[:50] + "..." if len(简介) > 50 else 简介
-                
-                # 清理小说名和作者
-                小说名 = 小说名.replace("[在线阅读]", "").strip()
-                if "作者：" in 作者:
-                    作者 = 作者.replace("作者：", "").strip()
-                
-                # 确保链接是完整的
-                if not 小说链接.startswith('http'):
-                    基础URL = 'https://www.shuwuwan.com'
-                    小说链接 = f"{基础URL}{小说链接}" if 小说链接.startswith('/') else f"{基础URL}/{小说链接}"
-                
-                所有搜索结果.append((小说名, 小说链接, 作者, 最新章节, 简介))
-                打印信息("检测到小说", f"{小说名} - {作者}", Fore.CYAN)
-        except Exception as e:
-            打印警告(f"处理搜索结果时出错：{str(e)}")
-            continue
-
-    # 如果没有找到任何搜索结果
-    if not 所有搜索结果:
-        打印错误(f"未找到相关小说，请尝试其他关键词")
-        浏览器.关闭浏览器()
-        exit()
-
-    打印标题("搜索结果")
-
-    # 显示所有搜索结果
-    for i, (小说名, 小说链接, 作者, 最新章节, 简介) in enumerate(所有搜索结果, 1):
-        打印信息(f"{i}", f"{小说名}", Fore.YELLOW)
-        打印信息("  作者", 作者)
-        打印信息("  最新章节", 最新章节)
-        打印信息("  简介", 简介)
-        print()
-
-    # 提示用户是否继续查看更多结果（如果有分页）
-    是否查看更多 = "n"
-    if 搜索结果总数 != "未知":
-        try:
-            搜索结果总数_数字 = int(搜索结果总数)
-            if 搜索结果总数_数字 > len(所有搜索结果) and len(所有搜索结果) > 0:
-                是否查看更多 = input(f"{Fore.YELLOW}是否查看更多结果？(y/n，默认n): {Style.RESET_ALL}").strip().lower() or "n"
-        except ValueError:
-            # 如果转换失败，说明搜索结果总数不是数字
-            pass
-
-    if 是否查看更多 == "y":
-        try:
-            # 获取下一页按钮并点击
-            with 错误抑制():
-                下一页元素 = 浏览器.driver.find_element("css selector", "a.next")
-                浏览器.driver.execute_script("arguments[0].click();", 下一页元素)
-                time.sleep(2)  # 等待页面加载
-                
-                # 重新获取页面源码并解析
-                搜索结果页面 = 浏览器.driver.page_source
-                搜索结果soup = BeautifulSoup(搜索结果页面, 'html.parser')
-                
-                # 重新获取搜索结果列表
-                下一页搜索结果列表 = 搜索结果soup.select('.list.dList > ul > li')
-                
-                打印标题("更多搜索结果")
-                
-                # 处理下一页的搜索结果
-                下一页搜索结果 = []
-                for 小说元素 in 下一页搜索结果列表:
-                    try:
-                        小说名元素 = 小说元素.select_one('.txtb .name a')
-                        if 小说名元素:
-                            小说名 = 小说名元素.text.strip()
-                            小说链接 = 小说名元素['href']
-                            
-                            作者元素 = 小说元素.select_one('.info dl:first-child dd a')
-                            作者 = 作者元素.text.strip() if 作者元素 else "未知"
-                            
-                            最新章节元素 = 小说元素.select_one('.info dl:last-child dd a')
-                            最新章节 = 最新章节元素.text.strip() if 最新章节元素 else "未知"
-                            
-                            简介元素 = 小说元素.select_one('.intro')
-                            简介 = 简介元素.text.strip() if 简介元素 else "暂无简介"
-                            简介 = 简介[:50] + "..." if len(简介) > 50 else 简介
-                            
-                            # 确保链接是完整的
-                            if not 小说链接.startswith('http'):
-                                基础URL = 'https://www.shuwuwan.com'
-                                小说链接 = f"{基础URL}{小说链接}" if 小说链接.startswith('/') else f"{基础URL}/{小说链接}"
-                            
-                            下一页搜索结果.append((小说名, 小说链接, 作者, 最新章节, 简介))
-                            打印信息("检测到小说", f"{小说名} - {作者}", Fore.CYAN)
-                    except Exception as e:
-                        continue
-                
-                # 添加到总结果列表
-                所有搜索结果.extend(下一页搜索结果)
-                
-                # 显示下一页的搜索结果
-                起始索引 = len(所有搜索结果) - len(下一页搜索结果) + 1
-                for i, (小说名, 小说链接, 作者, 最新章节, 简介) in enumerate(下一页搜索结果, 起始索引):
-                    打印信息(f"{i}", f"{小说名}", Fore.YELLOW)
-                    打印信息("  作者", 作者)
-                    打印信息("  最新章节", 最新章节)
-                    打印信息("  简介", 简介)
-                    print()
-        except Exception as e:
-            打印警告(f"获取更多结果失败：{e}")
-
-    # 选择要下载的小说
-    选择索引 = int(input(f"{Fore.YELLOW}请输入要下载的小说编号（1-{len(所有搜索结果)}）：{Style.RESET_ALL}")) - 1
-
-    if 选择索引 < 0 or 选择索引 >= len(所有搜索结果):
-        打印错误("无效的选择")
-        浏览器.关闭浏览器()
-        exit()
-
-    小说名, 小说链接, 作者, _, _ = 所有搜索结果[选择索引]
-
-    # 访问选择的小说详情页
-    with 错误抑制():
-        浏览器.打开地址(小说链接)
-        time.sleep(1)  # 等待页面加载
-
-    # 获取当前页面URL
-    小说页面URL = 浏览器.driver.current_url
-
-    # 获取页面HTML内容
-    页面源码 = 浏览器.driver.page_source
-    soup = BeautifulSoup(页面源码, 'html.parser')
-
-    # 从HTML结构中提取信息
     try:
-        # 获取小说标题
+        # 访问万书屋首页
+        浏览器.打开地址('https://www.rrssk.com/?165')
+        time.sleep(2)  # 等待页面加载
+        
+        # 获取搜索框并输入关键词
+        搜索关键词 = input(f"{Fore.YELLOW}请输入要搜索的小说名称：{Style.RESET_ALL}")
+        浏览器.输入内容('class','input', 搜索关键词)
+        浏览器.点击元素('class','btnSearch')
+        time.sleep(2)  # 等待搜索结果加载
+        
+        # 获取搜索结果页面源码
+        搜索结果页面 = 浏览器.driver.page_source
+        搜索结果soup = BeautifulSoup(搜索结果页面, 'html.parser')
+        
+        # 获取搜索结果列表
+        所有搜索结果 = []
+        搜索结果列表 = 搜索结果soup.select('.list.dList > ul > li')
+        if not 搜索结果列表:
+            搜索结果列表 = 搜索结果soup.select('.book-img-text .bookbox')
+        if not 搜索结果列表:
+            搜索结果列表 = 搜索结果soup.select('.result-list .result-item')
+        if not 搜索结果列表:
+            搜索结果列表 = 搜索结果soup.select('.books-list .books-item')
+        if not 搜索结果列表:
+            搜索结果列表 = 搜索结果soup.select('li.cc')
+        if not 搜索结果列表:
+            搜索结果列表 = 搜索结果soup.select('.novelslist2 li')
+        if not 搜索结果列表:
+            搜索结果列表 = 搜索结果soup.select('.conList .info')
+        if not 搜索结果列表:
+            搜索结果列表 = 搜索结果soup.select('.blue.btnBlue2')
+        
+        # 处理搜索结果
+        for 小说元素 in 搜索结果列表:
+            try:
+                # 尝试获取小说名和链接
+                小说名元素 = (小说元素.select_one('.txtb .name a') or
+                         小说元素.select_one('.name.font18 a') or
+                         小说元素.select_one('h3 a') or 
+                         小说元素.select_one('h4 a') or 
+                         小说元素.select_one('.bookname a') or 
+                         小说元素.select_one('a.blue') or
+                         小说元素.select_one('.s2 a') or
+                         小说元素.select_one('.name a') or
+                         小说元素.select_one('a[title]'))
+                
+                if 小说名元素:
+                    小说名 = 小说名元素.text.strip()
+                    小说链接 = 小说名元素['href']
+                    
+                    # 尝试获取作者
+                    作者元素 = (小说元素.select_one('.info dl:first-child dd a') or 
+                            小说元素.select_one('.dlS dd a') or
+                            小说元素.select_one('.author') or 
+                            小说元素.select_one('.bookauthor') or
+                            小说元素.select_one('.s4') or
+                            小说元素.select_one('.info .author'))
+                    作者 = 作者元素.text.strip() if 作者元素 else "未知"
+                    
+                    # 尝试获取最新章节
+                    最新章节元素 = 小说元素.select_one('.info dl:last-child dd a')
+                    最新章节 = 最新章节元素.text.strip() if 最新章节元素 else "未知"
+                    
+                    # 尝试获取简介
+                    简介元素 = 小说元素.select_one('.intro')
+                    简介 = 简介元素.text.strip() if 简介元素 else "暂无简介"
+                    简介 = 简介[:50] + "..." if len(简介) > 50 else 简介
+                    
+                    # 清理小说名和作者
+                    小说名 = 小说名.replace("[在线阅读]", "").strip()
+                    if "作者：" in 作者:
+                        作者 = 作者.replace("作者：", "").strip()
+                    
+                    # 确保链接是完整的
+                    if not 小说链接.startswith('http'):
+                        基础URL = 'https://www.shuwuwan.com'
+                        小说链接 = f"{基础URL}{小说链接}" if 小说链接.startswith('/') else f"{基础URL}/{小说链接}"
+                    
+                    所有搜索结果.append((小说名, 小说链接, 作者, 最新章节, 简介))
+            except Exception as e:
+                print(f"处理搜索结果时出错：{str(e)}")
+                continue
+        
+        # 如果没有找到任何搜索结果
+        if not 所有搜索结果:
+            打印错误("未找到相关小说，请尝试其他关键词")
+            浏览器.关闭浏览器()
+            return
+        
+        打印标题("搜索结果")
+        
+        # 显示所有搜索结果
+        for i, (小说名, 小说链接, 作者, 最新章节, 简介) in enumerate(所有搜索结果, 1):
+            打印信息(f"{i}", f"{小说名} - {作者}")
+            打印信息("  最新章节", 最新章节)
+            打印信息("  简介", 简介)
+            print()
+
+        # 选择要下载的小说
+        选择索引 = int(input(f"{Fore.YELLOW}请输入要下载的小说编号（1-{len(所有搜索结果)}）：{Style.RESET_ALL}")) - 1
+
+        if 选择索引 < 0 or 选择索引 >= len(所有搜索结果):
+            打印错误("无效的选择")
+            浏览器.关闭浏览器()
+            return
+
+        小说名, 小说链接, 作者, _, _ = 所有搜索结果[选择索引]
+
+        # 访问选择的小说详情页
+        with 错误抑制():
+            浏览器.打开地址(小说链接)
+            time.sleep(1)  # 等待页面加载
+
+        # 获取当前页面URL
+        小说页面URL = 浏览器.driver.current_url
+
+        # 获取页面HTML内容
+        页面源码 = 浏览器.driver.page_source
+        soup = BeautifulSoup(页面源码, 'html.parser')
+
+        # 获取小说信息
         小说标题 = soup.select_one('.conL .txtb .tit .name').text.strip()
-        
-        # 获取作者
         作者 = soup.select_one('.conL .txtb .tit .author a').text.strip()
-        
-        # 获取小说分类、状态、人气、更新时间
-        小说信息_列表 = soup.select('.conL .txtb .about ul li')
-        小说分类 = ""
-        小说状态 = ""
-        人气 = ""
-        更新时间 = ""
-        
-        for 信息 in 小说信息_列表[:4]:  # 前4个li包含基本信息
-            信息文本 = 信息.text.strip()
-            if "分类：" in 信息文本:
-                小说分类 = 信息文本.replace("分类：", "")
-            elif "状态：" in 信息文本:
-                小说状态 = 信息文本.replace("状态：", "")
-            elif "人气：" in 信息文本:
-                人气 = 信息文本.replace("人气：", "")
-            elif "更新时间：" in 信息文本:
-                更新时间 = 信息文本.replace("更新时间：", "")
-        
-        # 获取主角
-        主角元素 = soup.select_one('.conL .txtb .about ul li:nth-of-type(5) a')
-        主角 = 主角元素.text.strip() if 主角元素 else "未知"
-        
-        # 获取最新章节
-        最新章节元素 = soup.select_one('.conL .txtb .lastChapter a')
-        最新章节 = 最新章节元素.text.strip() if 最新章节元素 else "未知"
-        最新章节链接 = 最新章节元素['href'] if 最新章节元素 else ""
-        
-        # 获取小说介绍
         小说介绍 = soup.select_one('.conL .txtb .intro').text.strip()
         
-        # 打印获取到的信息
+        # 打印小说信息
         打印标题(f"《{小说标题}》 - 信息")
         打印信息("作者", 作者)
-        打印信息("分类", 小说分类)
-        打印信息("状态", 小说状态)
-        打印信息("人气", 人气)
-        打印信息("更新时间", 更新时间)
-        打印信息("主角", 主角)
-        打印信息("最新章节", 最新章节)
+        打印信息("介绍", 小说介绍[:100] + "..." if len(小说介绍) > 100 else 小说介绍)
         
         # 保存小说信息到文件
         with open(f'{下载目录}/{小说标题}_信息.txt', 'w', encoding='utf-8') as f:
             f.write(f"标题: 《{小说标题}》\n")
             f.write(f"作者: {作者}\n")
-            f.write(f"分类: {小说分类}\n")
-            f.write(f"状态: {小说状态}\n")
-            f.write(f"人气: {人气}\n")
-            f.write(f"更新时间: {更新时间}\n")
-            f.write(f"主角: {主角}\n")
-            f.write(f"最新章节: {最新章节}\n\n")
-            f.write("小说简介:\n")
-            f.write(小说介绍)
+            f.write(f"简介：\n{小说介绍}\n")
         
         打印成功(f"小说介绍已保存至：{下载目录}/{小说标题}_信息.txt")
-        
-        # 获取封面图片URL
-        封面元素 = soup.select_one('.conL .txtb .about .pic img')
-        if not 封面元素:
-            封面元素 = soup.select_one('.conL .picb .pic img')
-        if not 封面元素:
-            封面元素 = soup.select_one('.txtb .picb .pic img')  # 新增支持的DOM结构
-        if not 封面元素:
-            封面元素 = soup.select_one('.about .picb .pic img')  # 新增支持的DOM结构
-        if not 封面元素:
-            封面元素 = soup.select_one('.pic img')  # 最宽松的选择器，尝试匹配任何带有class为pic的img
-            
-        封面URL = None    
-        if 封面元素 and 封面元素.has_attr('src'):
-            封面URL = 封面元素['src']
-            
-            # 确保封面URL是正确的格式
-            if 封面URL.startswith("//"):
-                封面URL = "https:" + 封面URL
-            # 如果URL是相对路径，转为绝对路径
-            elif not 封面URL.startswith('http'):
-                # 正确构建基础URL
-                if 小说页面URL.startswith('https://'):
-                    基础URL = '/'.join(小说页面URL.split('/')[:3])
-                    封面URL = f"{基础URL}{封面URL}" if 封面URL.startswith('/') else f"{基础URL}/{封面URL}"
-                else:
-                    # 如果当前URL不是https开头，尝试使用固定的网站域名
-                    基础URL = "https://www.shuwuwan.com"
-                    封面URL = f"{基础URL}{封面URL}" if 封面URL.startswith('/') else f"{基础URL}/{封面URL}"
-            
-            # 支持直接输入的完整URL
-            if 'bookimg' in 封面URL and '封面URL' not in 封面URL:
-                print(f"{Fore.CYAN}检测到封面URL: {封面URL}{Style.RESET_ALL}")
-            else:
-                print(f"{Fore.CYAN}尝试修复封面URL: {封面URL}{Style.RESET_ALL}")
-                
-                # 尝试提取URL中的bookID
-                book_id_match = re.search(r'/book/(\w+)(-\d+)?\.html', 小说页面URL)
-                if book_id_match:
-                    book_id = book_id_match.group(1)
-                    # 构造可能的封面URL
-                    封面URL = f"https://www.shuwuwan.com/bookimg/{book_id}.jpg"
-                    print(f"{Fore.CYAN}根据书籍ID构造封面URL: {封面URL}{Style.RESET_ALL}")
-        else:
-            打印警告("未在页面中找到小说封面图片链接")
-            
-        # 允许用户手动输入封面URL
-        手动封面URL = input(f"{Fore.YELLOW}请输入封面URL(直接回车使用自动检测): {Style.RESET_ALL}").strip()
-        if 手动封面URL:
-            封面URL = 手动封面URL
-            print(f"{Fore.CYAN}使用手动输入的封面URL: {封面URL}{Style.RESET_ALL}")
-        
-        if 封面URL:
-            # 下载封面
-            print(f"{Fore.CYAN}正在下载小说封面...{Style.RESET_ALL}")
-            try:
-                # 添加请求头，模拟浏览器请求，绕过防盗链
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36',
-                    'Referer': 小说页面URL,  # 添加Referer头，解决防盗链问题
-                }
-                response = requests.get(封面URL, headers=headers, timeout=10)
-                if response.status_code == 200:
-                    # 获取文件扩展名
-                    文件扩展名 = os.path.splitext(封面URL)[1]
-                    if not 文件扩展名:
-                        文件扩展名 = '.jpg'  # 默认扩展名
-                    
-                    # 保存封面
-                    封面保存路径 = f'{下载目录}/{小说标题}_封面{文件扩展名}'
-                    with open(封面保存路径, 'wb') as f:
-                        f.write(response.content)
-                    打印成功(f"小说封面已保存")
-                else:
-                    打印警告(f"下载封面失败 (HTTP {response.status_code})")
-            except Exception as e:
-                打印警告(f"下载封面失败")
-        else:
-            打印警告("已跳过下载封面")
         
         # 获取所有章节列表
         所有章节列表 = []
         打印标题("获取章节列表")
 
         # 创建小说内容目录
-        小说目录 = f'{下载目录}/{小说标题}_章节'
-        if not os.path.exists(小说目录):
-            os.makedirs(小说目录)
-
-        最大页数 = 20  # 设置最大页数限制，防止无限循环
-        当前页数 = 1
-        连续无新增章节次数 = 0  # 初始化连续无新增章节计数器
-        所有章节列表 = []  # 存储所有章节的列表
-        获取到的章节ID集合 = set()  # 用于检查章节是否重复的ID集合
-
-        打印标题("获取章节列表")
+        小说章节目录 = f'{下载目录}/{小说标题}_章节'
+        if not os.path.exists(小说章节目录):
+            os.makedirs(小说章节目录)
         
-        # 保存章节列表页面，用于调试
-        os.makedirs(f'{下载目录}/章节列表页面', exist_ok=True)
+        # 获取章节列表
+        章节列表元素 = soup.select('.chapterList .list ul li .name a')
+        if not 章节列表元素:
+            章节列表元素 = soup.select('.conL .txtb .list ul li a')
+        if not 章节列表元素:
+            章节列表元素 = soup.select('.chapter-list li a')
+        if not 章节列表元素:
+            章节列表元素 = soup.select('.book-chapter-list li a')
+        if not 章节列表元素:
+            章节列表元素 = soup.select('.novel-chapter-list li a')
+        if not 章节列表元素:
+            章节列表元素 = soup.select('.chapter a')
         
-        # 获取已经打开的页面内容
-        页面源码 = 浏览器.driver.page_source
-        with open(f'{下载目录}/章节列表页面/章节列表页面_{当前页数}.html', 'w', encoding='utf-8') as f:
-            f.write(页面源码)
-            
-        # 处理章节列表循环
-        while 当前页数 <= 最大页数:  # 添加最大页数限制
-            print(f"{Fore.CYAN}正在获取第 {当前页数} 页章节列表...{Style.RESET_ALL}")
-            
-            # 获取当前页面的章节列表
-            页面源码 = 浏览器.driver.page_source
-            soup = BeautifulSoup(页面源码, 'html.parser')
-            
-            # 获取开始爬取前的章节数量
-            开始章节数量 = len(所有章节列表)
-            当前页面新增章节数 = 0
-            
-            # 查找所有章节列表区块
-            章节区块列表 = soup.select('.chapterList')
-            
-            if 章节区块列表:
-                打印成功(f"找到 {len(章节区块列表)} 个章节区块")
-                
-                # 遍历每个章节区块
-                for 索引, 章节区块 in enumerate(章节区块列表):
-                    # 获取区块标题
-                    区块标题元素 = 章节区块.select_one('.tit.font18')
-                    区块标题 = 区块标题元素.text.strip() if 区块标题元素 else f"未命名区块_{索引+1}"
-                    
-                    # 仅在第一轮获取时打印区块标题
-                    if 当前页数 == 1:
-                        打印信息(f"区块[{索引+1}]", 区块标题, Fore.CYAN)
-                    
-                    # 获取章节列表容器
-                    章节列表容器 = 章节区块.select_one('.list.font14')
-                    if 章节列表容器:
-                        # 获取章节元素
-                        章节元素列表 = 章节列表容器.select('li .name a') or 章节列表容器.select('li a')
-                        
-                        if 章节元素列表:
-                            打印信息(f"区块[{索引+1}] {区块标题}", f"发现 {len(章节元素列表)} 个章节", Fore.GREEN)
-                            
-                            # 处理当前区块的章节
-                            for 章节元素 in 章节元素列表:
-                                章节名 = 章节元素.text.strip()
-                                章节链接 = 章节元素['href']
-                                
-                                # 从链接中提取章节ID
-                                章节ID匹配 = re.search(r'/book/([A-Za-z0-9]+)-(\d+)\.html', 章节链接)
-                                if 章节ID匹配:
-                                    小说ID = 章节ID匹配.group(1)
-                                    章节ID = 章节ID匹配.group(2)
-                                    完整章节ID = f"{小说ID}-{章节ID}"
-                                else:
-                                    # 如果无法提取ID，使用完整链接作为ID
-                                    完整章节ID = 章节链接
-                                
-                                # 如果链接是相对路径，转为绝对路径
-                                if not 章节链接.startswith('http'):
-                                    基础URL = '/'.join(小说页面URL.split('/')[:3])
-                                    章节链接 = f"{基础URL}{章节链接}" if 章节链接.startswith('/') else f"{基础URL}/{章节链接}"
-                                
-                                # 检查是否已经存在该章节，避免重复添加
-                                if 完整章节ID not in 获取到的章节ID集合:
-                                    所有章节列表.append((章节名, 章节链接, 完整章节ID))
-                                    获取到的章节ID集合.add(完整章节ID)
-                                    当前页面新增章节数 += 1
-                                    
-                                    # 仅在调试模式下打印每个章节
-                                    # print(f"· {章节名} [{完整章节ID}]")
-                                # else:
-                                    # 不打印重复章节，减少输出噪音
-                                    # print(f"{Fore.YELLOW}· 重复章节：{章节名} [{完整章节ID}]{Style.RESET_ALL}")
-                        else:
-                            打印警告(f"区块[{索引+1}] {区块标题}: 未找到章节链接")
-                    else:
-                        打印警告(f"区块[{索引+1}] {区块标题}: 未找到章节列表容器")
-            else:
-                打印警告(f"未找到任何章节区块")
-                
-                # 尝试直接查找章节列表元素
-                章节元素列表 = soup.select('.list.font14 li .name a') or soup.select('.list.font14 li a')
-                if 章节元素列表:
-                    打印成功(f"直接找到 {len(章节元素列表)} 个章节")
-                    
-                    # 处理页面上的章节
-                    for 章节元素 in 章节元素列表:
-                        章节名 = 章节元素.text.strip()
-                        章节链接 = 章节元素['href']
-                        
-                        # 从链接中提取章节ID
-                        章节ID匹配 = re.search(r'/book/([A-Za-z0-9]+)-(\d+)\.html', 章节链接)
-                        if 章节ID匹配:
-                            小说ID = 章节ID匹配.group(1)
-                            章节ID = 章节ID匹配.group(2)
-                            完整章节ID = f"{小说ID}-{章节ID}"
-                        else:
-                            # 如果无法提取ID，使用完整链接作为ID
-                            完整章节ID = 章节链接
-                        
-                        # 如果链接是相对路径，转为绝对路径
-                        if not 章节链接.startswith('http'):
-                            基础URL = '/'.join(小说页面URL.split('/')[:3])
-                            章节链接 = f"{基础URL}{章节链接}" if 章节链接.startswith('/') else f"{基础URL}/{章节链接}"
-                        
-                        # 检查是否已经存在该章节，避免重复添加
-                        if 完整章节ID not in 获取到的章节ID集合:
-                            所有章节列表.append((章节名, 章节链接, 完整章节ID))
-                            获取到的章节ID集合.add(完整章节ID)
-                            当前页面新增章节数 += 1
-                            # print(f"· {章节名} [{完整章节ID}]")
-                        # else:
-                            # print(f"{Fore.YELLOW}· 重复章节：{章节名} [{完整章节ID}]{Style.RESET_ALL}")
-                else:
-                    # 保存当前页面源码以便调试
-                    with open(f'{下载目录}/章节列表页面/章节列表页面错误_{当前页数}.html', 'w', encoding='utf-8') as f:
-                        f.write(页面源码)
-                    
-                    打印警告(f"未找到任何章节元素，页面已保存为章节列表页面错误_{当前页数}.html")
-                    连续无新增章节次数 += 1
-            
-            # 获取结束后的章节数量，检查是否有新章节添加
-            结束章节数量 = len(所有章节列表)
-            新增章节数 = 结束章节数量 - 开始章节数量
-            
-            打印信息(f"第 {当前页数} 页", f"新增章节 {当前页面新增章节数} 个，总计 {结束章节数量} 个", Fore.GREEN)
-            
-            # 如果当前页面没有新增章节，增加连续无新增计数
-            if 当前页面新增章节数 == 0:
-                连续无新增章节次数 += 1
-                打印警告(f"当前页未获取到新章节，可能是重复页面或已获取完毕")
-                
-                # 如果连续两页都没有新增章节，强制终止
-                if 连续无新增章节次数 >= 2:
-                    打印警告(f"连续多页未获取到新章节，强制终止获取")
-                    break
-            else:
-                # 重置连续无新增计数
-                连续无新增章节次数 = 0
-            
-            # 检查当前页是否为最后一页
-            是否最后一页 = False
-            
-            # 检查"下一页"按钮的状态
-            下一页元素 = soup.select_one('.next')
-            没有了元素 = soup.select_one('.noNext.disabled')
-            
-            # 检查是否有"没有了"文本，并且不是隐藏的
-            if 没有了元素 and 'display: none' not in str(没有了元素) and 没有了元素.text.strip() == "没有了":
-                是否最后一页 = True
-                打印警告(f"已到达最后页（找到'没有了'标记）")
-            
-            # 检查下一页按钮是否不存在或者隐藏
-            if not 下一页元素 or 'display: none' in str(下一页元素):
-                是否最后一页 = True
-                打印警告(f"已到达最后页（下一页按钮不可用）")
-            
-            # 如果是最后一页，则退出循环
-            if 是否最后一页:
-                打印警告(f"已到达最后页，停止获取章节列表")
-                break
-            
-            # 尝试查找并点击下一页按钮
-            try:
-                # 如果当前已经是最后一页，则退出
-                if 是否最后一页:
-                    break
-                
-                # 尝试通过CSS选择器找到下一页按钮并点击
-                下一页按钮元素 = 浏览器.driver.find_element('css selector', '.next')
-                
-                if 下一页按钮元素 and 下一页按钮元素.is_displayed():
-                    # 使用JavaScript点击，避免一些点击问题
-                    浏览器.driver.execute_script("arguments[0].click();", 下一页按钮元素)
-                    打印成功(f"点击了下一页按钮，准备获取下一页章节列表")
-                    时间戳 = int(time.time())
-                    # 等待页面加载
-                    time.sleep(2)
-                    
-                    # 保存下一页页面以便调试
-                    页面源码 = 浏览器.driver.page_source
-                    with open(f'{下载目录}/章节列表页面/章节列表页面_{当前页数+1}.html', 'w', encoding='utf-8') as f:
-                        f.write(页面源码)
-                    
-                    当前页数 += 1
-                else:
-                    # 尝试使用下拉框选择页码
-                    try:
-                        选择框 = 浏览器.driver.find_element('css selector', '.select')
-                        # 如果选择框可见
-                        if 选择框.is_displayed():
-                            # 获取下一个选项值
-                            浏览器.driver.execute_script(f"arguments[0].value = '{当前页数 + 1}';", 选择框)
-                            浏览器.driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", 选择框)
-                            打印成功(f"通过下拉框选择了新的页码分组")
-                            time.sleep(2)  # 等待页面加载
-                            当前页数 += 1
-                        else:
-                            打印警告(f"选择框不可见，无法继续翻页")
-                            break
-                    except Exception as e:
-                        打印错误(f"无法继续获取章节: {e}")
-                        break
-            except Exception as e:
-                打印错误(f"获取下一页失败: {e}")
-                # 保存当前页面，便于分析错误
-                页面源码 = 浏览器.driver.page_source
-                with open(f'{下载目录}/章节列表页面/翻页错误_{当前页数}.html', 'w', encoding='utf-8') as f:
-                    f.write(页面源码)
-                break
-            
-            # 页数检查 - 如果超过了最大页数限制则终止
-            if 当前页数 > 最大页数:
-                打印错误(f"已达到最大页数限制（{最大页数}页），强制终止获取")
-                break
+        if not 章节列表元素:
+            打印错误("无法获取章节列表")
+            浏览器.关闭浏览器()
+            return
         
-        # 确保章节按正确顺序排列 - 根据章节URL中的序号或按添加顺序排序
-        所有章节列表_排序 = []
-        for 章节名, 章节链接, 章节ID in 所有章节列表:
-            # 尝试从ID中提取章节序号
-            章节序号匹配 = re.search(r'-(\d+)$', 章节ID)
-            if 章节序号匹配:
-                序号 = int(章节序号匹配.group(1))
-                所有章节列表_排序.append((序号, 章节名, 章节链接))
-            else:
-                # 如果无法提取序号，则使用当前列表长度作为序号
-                所有章节列表_排序.append((len(所有章节列表_排序), 章节名, 章节链接))
+        章节总数 = len(章节列表元素)
+        打印信息("总章节数", 章节总数)
         
-        # 按序号排序
-        所有章节列表_排序.sort(key=lambda x: x[0])
-        # 转换回原来的格式
-        所有章节列表 = [(章节名, 章节链接) for _, 章节名, 章节链接 in 所有章节列表_排序]
+        # 询问下载范围
+        下载方式 = input(f"{Fore.YELLOW}选择下载方式 (1:全本下载, 2:自定义范围): {Style.RESET_ALL}")
         
-        打印成功(f"共获取到 {len(所有章节列表)} 个不重复章节，总共爬取了 {当前页数} 页")
-        打印分隔线()
+        开始章节 = 0
+        结束章节 = 章节总数
         
-        # 询问是否下载所有章节
-        下载选择 = input(f"{Fore.YELLOW}是否下载所有章节？(y/n): {Style.RESET_ALL}").strip().lower()
-        
-        if 下载选择 == 'y':
-            # 询问下载格式选择
-            格式选择 = input(f"{Fore.YELLOW}选择下载格式：1=EPUB（默认）, 2=TXT: {Style.RESET_ALL}").strip() or "1"
+        if 下载方式 == "2":
+            开始章节 = int(input(f"{Fore.YELLOW}请输入起始章节 (1-{章节总数}): {Style.RESET_ALL}")) - 1
+            结束章节 = int(input(f"{Fore.YELLOW}请输入结束章节 (1-{章节总数}): {Style.RESET_ALL}"))
             
-            print(f"{Fore.CYAN}\n开始下载章节内容...{Style.RESET_ALL}")
-            打印分隔线()
-            
-            # 创建进度条
-            进度条 = tqdm(total=len(所有章节列表), desc="下载进度", unit="章", 
-                    bar_format="{l_bar}%s{bar}%s{r_bar}" % (Fore.GREEN, Style.RESET_ALL))
-            
-            # 单线程顺序下载章节
+            if 开始章节 < 0:
+                开始章节 = 0
+            if 结束章节 > 章节总数:
+                结束章节 = 章节总数
+        
+        # 询问下载格式
+        格式选择 = input(f"{Fore.YELLOW}选择下载格式 (1:TXT, 2:EPUB): {Style.RESET_ALL}")
+        
+        # 创建进度条
+        with tqdm(total=结束章节-开始章节, desc="下载进度", unit="章",
+                 bar_format="{l_bar}%s{bar}%s{r_bar}" % (Fore.GREEN, Style.RESET_ALL)) as 进度条:
             下载结果 = []
             
-            for idx, (章节名, 章节链接) in enumerate(所有章节列表):
+            # 下载章节内容
+            for i in range(开始章节, 结束章节):
+                章节 = 章节列表元素[i]
+                章节名 = 章节.text.strip()
+                章节链接 = 章节['href']
+                
+                # 构建完整的章节链接
+                if not 章节链接.startswith('http'):
+                    章节链接 = f"https://www.shuwuwan.com{章节链接}"
+                
                 try:
-                    # 使用同一个浏览器窗口
-                    with 错误抑制():
-                        浏览器.打开地址(章节链接)
+                    # 访问章节页面
+                    浏览器.打开地址(章节链接)
                     time.sleep(0.5)  # 等待页面加载
                     
                     # 获取章节内容
                     章节页面源码 = 浏览器.driver.page_source
                     章节soup = BeautifulSoup(章节页面源码, 'html.parser')
-                    
-                    # 提取章节内容
                     章节内容元素 = 章节soup.select_one('#content')
+                    
                     if 章节内容元素:
                         章节内容 = 章节内容元素.text.strip()
                         
                         # 清理章节内容
-                        章节内容 = 章节内容.replace('    ', '\n\n')  # 替换多个空格为换行
+                        章节内容 = 章节内容.replace('    ', '\n\n')
                         
-                        # 清洗内容，移除广告和不必要的文本
+                        # 清洗内容
                         需要移除的内容 = [
                             "(http://www.shuwuwan.com/book/F72W-1.html)",
                             "章节错误,点此举报(免注册)我们会尽快处理.举报后请耐心等待,并刷新页面。",
@@ -777,47 +793,37 @@ def test_打开万书屋首页():
                         for 广告内容 in 需要移除的内容:
                             章节内容 = 章节内容.replace(广告内容, "")
                         
-                        # 强化URL清洗逻辑
-                        # 移除形如@http://www.shuwuwan.com/book/F72W-834.html的网址
-                        章节内容 = re.sub(r'@https?://www\.shuwuwan\.com/book/\w+-\d+\.html', '', 章节内容)
-                        # 移除任何网址格式
-                        章节内容 = re.sub(r'@https?://[^\s]+', '', 章节内容)
+                        # 清理章节末尾的URL
+                        章节内容 = re.sub(r'https?://[^\s<>"]+|www\.[^\s<>"]+', '', 章节内容)
+                        章节内容 = re.sub(r'[a-zA-Z0-9-]+\.html', '', 章节内容)
                         
-                        # 移除括号内的URL，如(http:///book/5WAA-1.html)
-                        章节内容 = re.sub(r'\(https?:/?/?/book/[A-Za-z0-9]+-\d+\.html\)', '', 章节内容)
-                        # 更通用的括号内URL移除模式
-                        章节内容 = re.sub(r'\(https?:/?/?/?[^\)]+\)', '', 章节内容)
+                        # 清理所有类型的括号及其内容
+                        章节内容 = re.sub(r'\([^)]*\)', '', 章节内容)  # 清理英文括号
+                        章节内容 = re.sub(r'（[^）]*）', '', 章节内容)  # 清理中文括号
+                        章节内容 = re.sub(r'【[^】]*】', '', 章节内容)  # 清理中文方括号
+                        章节内容 = re.sub(r'\[[^\]]*\]', '', 章节内容)  # 清理英文方括号
+                        章节内容 = re.sub(r'「[^」]*」', '', 章节内容)  # 清理中文书名号
+                        章节内容 = re.sub(r'『[^』]*』', '', 章节内容)  # 清理中文双书名号
                         
-                        # 移除末尾可能出现的URL或特殊字符
-                        章节内容 = re.sub(r'http:///book/[A-Za-z0-9]+-\d+\.html$', '', 章节内容)
-                        章节内容 = re.sub(r'https?://[^\s]+$', '', 章节内容)
+                        # 清理单个括号
+                        章节内容 = re.sub(r'[\(（【\[「『]', '', 章节内容)  # 清理左括号
+                        章节内容 = re.sub(r'[\)）】\]」』]', '', 章节内容)  # 清理右括号
                         
-                        # 针对无协议头的URL格式，如: //www.domain.com 或 /book/id-num.html
-                        章节内容 = re.sub(r'//www\.[^\s]+', '', 章节内容)
-                        章节内容 = re.sub(r'/book/[A-Za-z0-9]+-\d+\.html', '', 章节内容)
-
-                        # 移除空行
-                        章节内容行 = 章节内容.split('\n')
-                        清洗后章节内容 = []
+                        # 清理多余的空行和空格
+                        章节内容 = re.sub(r'\n\s*\n\s*\n+', '\n\n', 章节内容)  # 清理多余空行
+                        章节内容 = re.sub(r'[ \t]+', ' ', 章节内容)  # 清理多余空格
+                        章节内容 = re.sub(r'\n\s+', '\n', 章节内容)  # 清理行首空格
+                        章节内容 = re.sub(r'\s+\n', '\n', 章节内容)  # 清理行尾空格
                         
-                        for 行 in 章节内容行:
-                            行 = 行.strip()
-                            # 跳过可能包含URL或广告的行
-                            if 'http' in 行 or '/book/' in 行 or '举报' in 行 or '首发' in 行:
-                                continue
-                            
-                            # 忽略空行和只包含特殊字符的行
-                            if 行 and not all(c in ',.!?;:。，！？；：-—_=+~`@#$%^&*()[]{}<>/\\|\'"' for c in 行):
-                                清洗后章节内容.append(行)
+                        # 清理等号分隔线
+                        章节内容 = re.sub(r'=+', '', 章节内容)
                         
-                        章节内容 = '\n\n'.join(清洗后章节内容)
-                        
-                        # 最后一次清理，移除可能的尾部URL
-                        章节内容 = re.sub(r'\n\n.*?https?://.*?$', '', 章节内容)
+                        # 清理章节内容首尾的空白字符
+                        章节内容 = 章节内容.strip()
                         
                         # 保存章节内容
-                        章节文件名 = f"{idx+1:04d}_{章节名}.txt"  # 格式化章节序号为4位数
-                        with open(f'{小说目录}/{章节文件名}', 'w', encoding='utf-8') as f:
+                        章节文件名 = f"{i+1:04d}_{章节名}.txt"
+                        with open(f'{小说章节目录}/{章节文件名}', 'w', encoding='utf-8') as f:
                             f.write(f"{章节名}\n\n")
                             f.write(章节内容)
                         
@@ -834,59 +840,69 @@ def test_打开万书屋首页():
             # 计算下载成功的章节数
             成功数量 = sum(下载结果)
             打印分隔线()
-            打印成功(f"章节下载完成！成功：{成功数量}/{len(所有章节列表)}")
+            打印成功(f"章节下载完成！成功：{成功数量}/{len(下载结果)}")
             
             # 创建完整小说文件
             print(f"{Fore.CYAN}正在生成完整小说文件...{Style.RESET_ALL}")
             
             # 根据用户选择的格式生成对应文件
-            if 格式选择 == "2":  # TXT格式
-                生成TXT文件(小说标题, 作者, 小说介绍, 小说目录, 下载目录)
+            if 格式选择 == "1":  # TXT格式
+                生成TXT文件(小说标题, 作者, 小说介绍, 小说章节目录, 下载目录)
             else:  # EPUB格式（默认）
-                生成EPUB文件(小说标题, 作者, 小说介绍, 小说目录, 下载目录)
-        else:
-            打印警告("已跳过下载章节内容")
+                生成EPUB文件(小说标题, 作者, 小说介绍, 小说章节目录, 下载目录)
     
     except Exception as e:
         打印错误(f"获取小说信息出错：{e}")
         import traceback
         traceback.print_exc()
 
-    with 错误抑制():
-        浏览器.关闭浏览器()
+    finally:
+        with 错误抑制():
+            浏览器.关闭浏览器()
 
 # 生成TXT格式小说文件
-def 生成TXT文件(小说标题, 作者, 小说介绍, 小说目录, 下载目录):
-    # 生成TXT文件路径
-    txt文件路径 = f'{下载目录}/{小说标题}.txt'
-    
-    # 检查是否已存在同名文件，如果存在则先删除
-    if os.path.exists(txt文件路径):
-        try:
-            os.remove(txt文件路径)
-            print(f"{Fore.YELLOW}已删除旧的TXT文件{Style.RESET_ALL}")
-        except Exception as e:
-            print(f"{Fore.RED}删除旧文件失败: {e}{Style.RESET_ALL}")
-    
-    with open(txt文件路径, 'w', encoding='utf-8') as outfile:
-        # 写入小说信息
-        outfile.write(f"书名：{小说标题}\n")
-        outfile.write(f"作者：{作者}\n")
-        outfile.write(f"简介：\n{小说介绍}\n\n")
-        outfile.write("=" * 50 + "\n\n")
+def 生成TXT文件(小说标题, 作者, 小说介绍, 小说章节目录, 下载目录):
+    try:
+        # 生成TXT文件路径
+        txt文件路径 = f'{下载目录}/{小说标题}.txt'
         
-        # 按顺序写入章节内容
-        章节文件列表 = sorted(os.listdir(小说目录))
-        总字数 = 0
-        总章节数 = 0
+        # 检查是否已存在同名文件，如果存在则先删除
+        if os.path.exists(txt文件路径):
+            try:
+                os.remove(txt文件路径)
+                print(f"{Fore.YELLOW}已删除旧的TXT文件{Style.RESET_ALL}")
+            except Exception as e:
+                print(f"{Fore.RED}删除旧文件失败: {e}{Style.RESET_ALL}")
+                return False
         
-        # 添加进度条
-        with tqdm(total=len(章节文件列表), desc="生成TXT文件", unit="章",
-                 bar_format="{l_bar}%s{bar}%s{r_bar}" % (Fore.GREEN, Style.RESET_ALL)) as pbar:
-            for 章节文件 in 章节文件列表:
-                if 章节文件.endswith('.txt'):
+        # 检查章节目录是否存在
+        if not os.path.exists(小说章节目录):
+            print(f"{Fore.RED}章节目录不存在: {小说章节目录}{Style.RESET_ALL}")
+            return False
+            
+        # 检查章节文件是否存在
+        章节文件列表 = sorted([f for f in os.listdir(小说章节目录) if f.endswith('.txt')])
+        if not 章节文件列表:
+            print(f"{Fore.RED}未找到任何章节文件{Style.RESET_ALL}")
+            return False
+        
+        with open(txt文件路径, 'w', encoding='utf-8') as outfile:
+            # 写入小说信息
+            outfile.write(f"书名：{小说标题}\n")
+            outfile.write(f"作者：{作者}\n")
+            outfile.write(f"简介：\n{小说介绍}\n\n")
+            outfile.write("=" * 50 + "\n\n")
+            
+            # 按顺序写入章节内容
+            总字数 = 0
+            总章节数 = 0
+            
+            # 添加进度条
+            with tqdm(total=len(章节文件列表), desc="生成TXT文件", unit="章",
+                     bar_format="{l_bar}%s{bar}%s{r_bar}" % (Fore.GREEN, Style.RESET_ALL)) as pbar:
+                for 章节文件 in 章节文件列表:
                     try:
-                        with open(f'{小说目录}/{章节文件}', 'r', encoding='utf-8') as infile:
+                        with open(f'{小说章节目录}/{章节文件}', 'r', encoding='utf-8') as infile:
                             章节内容 = infile.read()
                             outfile.write(章节内容)
                             outfile.write("\n\n" + "=" * 30 + "\n\n")  # 章节分隔符
@@ -896,150 +912,168 @@ def 生成TXT文件(小说标题, 作者, 小说介绍, 小说目录, 下载目�
                             章节字数 = len(章节正文.replace('\n', '').replace(' ', ''))
                             总字数 += 章节字数
                             总章节数 += 1
-                    except Exception:
-                        # 忽略错误，继续处理下一章节
-                        pass
+                    except Exception as e:
+                        print(f"{Fore.RED}处理章节 {章节文件} 时出错: {e}{Style.RESET_ALL}")
+                        continue
                     finally:
                         # 无论成功与否，都更新进度条
                         pbar.update(1)
+            
+            # 在文件末尾添加统计信息
+            outfile.write(f"\n\n完结统计：\n")
+            outfile.write(f"总章节数：{总章节数}\n")
+            outfile.write(f"总字数：{总字数} 字\n")
+            outfile.write(f"下载时间：{time.strftime('%Y-%m-%d %H:%M:%S')}\n")
         
-        # 在文件末尾添加统计信息
-        outfile.write(f"\n\n完结统计：\n")
-        outfile.write(f"总章节数：{总章节数}\n")
-        outfile.write(f"总字数：{总字数} 字\n")
-        outfile.write(f"下载时间：{time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-    
-    打印成功(f"完整TXT小说文件已生成：{下载目录}/{小说标题}.txt")
-    打印信息("总章节数", 总章节数, Fore.CYAN)
-    打印信息("总字数", f"{总字数} 字", Fore.CYAN)
-    打印标题("下载完成")
+        if 总章节数 == 0:
+            print(f"{Fore.RED}生成TXT文件失败：未能写入任何章节{Style.RESET_ALL}")
+            if os.path.exists(txt文件路径):
+                os.remove(txt文件路径)
+            return False
+            
+        print(f"{Fore.GREEN}完整TXT小说文件已生成：{下载目录}/{小说标题}.txt{Style.RESET_ALL}")
+        print(f"{Fore.WHITE}总章节数: {Fore.CYAN}{总章节数}{Style.RESET_ALL}")
+        print(f"{Fore.WHITE}总字数: {Fore.CYAN}{总字数} 字{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}下载完成{Style.RESET_ALL}")
+        return True
+        
+    except Exception as e:
+        print(f"{Fore.RED}生成TXT文件时出错: {str(e)}{Style.RESET_ALL}")
+        if os.path.exists(txt文件路径):
+            try:
+                os.remove(txt文件路径)
+            except:
+                pass
+        return False
 
 # 生成EPUB格式小说文件
-def 生成EPUB文件(小说标题, 作者, 小说介绍, 小说目录, 下载目录):
-    # 生成EPUB文件路径
-    epub_文件路径 = f'{下载目录}/{小说标题}.epub'
-    
-    # 检查是否已存在同名文件，如果存在则先删除
-    if os.path.exists(epub_文件路径):
-        try:
-            os.remove(epub_文件路径)
-            print(f"{Fore.YELLOW}已删除旧的EPUB文件{Style.RESET_ALL}")
-        except Exception as e:
-            print(f"{Fore.RED}删除旧文件失败: {e}{Style.RESET_ALL}")
+def 生成EPUB文件(小说标题, 作者, 小说介绍, 小说章节目录, 下载目录):
+    try:
+        # 生成EPUB文件路径
+        epub_文件路径 = f'{下载目录}/{小说标题}.epub'
+        
+        # 检查是否已存在同名文件，如果存在则先删除
+        if os.path.exists(epub_文件路径):
+            try:
+                os.remove(epub_文件路径)
+                print(f"{Fore.YELLOW}已删除旧的EPUB文件{Style.RESET_ALL}")
+            except Exception as e:
+                print(f"{Fore.RED}删除旧文件失败: {e}{Style.RESET_ALL}")
+                return False
+        
+        # 检查章节目录是否存在
+        if not os.path.exists(小说章节目录):
+            print(f"{Fore.RED}章节目录不存在: {小说章节目录}{Style.RESET_ALL}")
+            return False
             
-    # 检查是否存在TXT文件，确认只生成EPUB（防止出现选择EPUB但同时生成TXT的情况）
-    txt文件路径 = f'{下载目录}/{小说标题}.txt'
-    if os.path.exists(txt文件路径):
-        try:
-            os.remove(txt文件路径)
-            print(f"{Fore.YELLOW}删除已存在的TXT文件，仅生成EPUB格式{Style.RESET_ALL}")
-        except Exception as e:
-            print(f"{Fore.RED}删除旧TXT文件失败: {e}{Style.RESET_ALL}")
-    
-    # 创建EPUB书籍
-    book = epub.EpubBook()
-    
-    # 设置元数据
-    book.set_identifier(f'id{int(time.time())}')
-    book.set_title(小说标题)
-    book.set_language('zh-CN')
-    book.add_author(作者)
-    
-    # 添加CSS样式
-    css_style = """
-    @namespace epub "http://www.idpf.org/2007/ops";
-    body {
-        font-family: SimSun, serif;
-        line-height: 1.5;
-        padding: 0 1em;
-    }
-    h1 {
-        text-align: center;
-        padding: 0.5em 0;
-        margin: 0;
-    }
-    p {
-        text-indent: 2em;
-        margin: 0;
-        padding: 0.3em 0;
-    }
-    """
-    style = epub.EpubItem(uid="style_default", file_name="style/default.css", 
-                         media_type="text/css", content=css_style)
-    book.add_item(style)
-    
-    # 创建简介页
-    介绍页 = epub.EpubHtml(title='简介', file_name='intro.xhtml', lang='zh-CN')
-    介绍页.content = f'<h1>{小说标题}</h1>\n<p>作者：{作者}</p>\n<h2>简介</h2>\n<p>{"</p>\n<p>".join(小说介绍.split("\n"))}</p>'
-    介绍页.add_item(style)
-    book.add_item(介绍页)
-    
-    章节列表 = []
-    章节文件列表 = sorted(os.listdir(小说目录))
-    
-    # 添加封面图片
-    封面路径 = f'{下载目录}/{小说标题}_封面.jpg'
-    if os.path.exists(封面路径):
-        with open(封面路径, 'rb') as f:
-            book.set_cover('cover.jpg', f.read())
-        打印成功("已添加封面图片")
-    
-    # 创建各章节
-    print(f"{Fore.CYAN}正在生成EPUB章节...{Style.RESET_ALL}")
-    
-    # 首先按文件名排序以确保章节顺序正确
-    章节文件列表 = sorted(os.listdir(小说目录))
-    
-    with tqdm(total=len([f for f in 章节文件列表 if f.endswith('.txt')]), desc="创建章节", unit="章",
-             bar_format="{l_bar}%s{bar}%s{r_bar}" % (Fore.GREEN, Style.RESET_ALL)) as pbar:
-        for i, 章节文件 in enumerate(章节文件列表):
-            if 章节文件.endswith('.txt'):
+        # 检查章节文件是否存在
+        章节文件列表 = sorted([f for f in os.listdir(小说章节目录) if f.endswith('.txt')],
+                      key=lambda x: int(x.split('_')[0]))
+        if not 章节文件列表:
+            print(f"{Fore.RED}未找到任何章节文件{Style.RESET_ALL}")
+            return False
+        
+        # 创建EPUB书籍
+        book = epub.EpubBook()
+        
+        # 设置元数据
+        book.set_identifier(str(uuid.uuid4()))
+        book.set_title(小说标题)
+        book.set_language('zh-CN')
+        book.add_author(作者)
+        
+        # 添加封面图片
+        封面路径 = f'{下载目录}/{小说标题}_封面.jpg'
+        if os.path.exists(封面路径):
+            try:
+                with open(封面路径, 'rb') as f:
+                    book.set_cover("cover.jpg", f.read())
+                print(f"{Fore.GREEN}✓ 已添加封面图片{Style.RESET_ALL}")
+            except Exception as e:
+                print(f"{Fore.YELLOW}添加封面失败: {e}{Style.RESET_ALL}")
+        
+        # 添加CSS样式
+        style = '''
+            @namespace epub "http://www.idpf.org/2007/ops";
+            body { font-family: SimSun, serif; }
+            h1 { text-align: center; color: #333; margin: 1em 0; }
+            p { text-indent: 2em; line-height: 1.5; margin: 0.5em 0; }
+        '''
+        nav_css = epub.EpubItem(uid="style_nav", file_name="style/nav.css", media_type="text/css", content=style)
+        book.add_item(nav_css)
+        
+        # 添加简介章节
+        intro_chapter = epub.EpubHtml(title='简介', file_name='intro.xhtml', lang='zh-CN')
+        intro_chapter.content = f'<h1>简介</h1><p>{小说介绍}</p>'
+        intro_chapter.add_item(nav_css)
+        book.add_item(intro_chapter)
+        
+        # 添加章节
+        chapters = []
+        总字数 = 0
+        总章节数 = 0
+        
+        # 添加进度条
+        with tqdm(total=len(章节文件列表), desc="生成EPUB文件", unit="章",
+                 bar_format="{l_bar}%s{bar}%s{r_bar}" % (Fore.GREEN, Style.RESET_ALL)) as pbar:
+            for 章节文件 in 章节文件列表:
                 try:
-                    with open(f'{小说目录}/{章节文件}', 'r', encoding='utf-8') as infile:
-                        章节内容 = infile.read()
-                        章节行 = 章节内容.split('\n')
-                        章节标题 = 章节行[0]  # 第一行是标题
-                        章节正文 = '\n'.join(章节行[2:])  # 从第3行开始是正文（第2行是空行）
-                        
-                        # 格式化正文，将段落包装在<p>标签中
-                        章节正文HTML = ""
-                        for 段落 in re.split(r'\n\s*\n', 章节正文):
-                            if 段落.strip():
-                                # 再次移除可能的网址
-                                段落 = re.sub(r'@https?://[^\s]+', '', 段落)
-                                章节正文HTML += f"<p>{段落.strip()}</p>\n"
+                    with open(f'{小说章节目录}/{章节文件}', 'r', encoding='utf-8') as f:
+                        章节内容 = f.read()
+                        章节名 = 章节内容.split('\n')[0]  # 第一行是章节名
+                        章节正文 = '\n'.join(章节内容.split('\n')[2:])  # 跳过标题和空行
                         
                         # 创建章节
-                        章节 = epub.EpubHtml(title=章节标题, file_name=f'chapter_{i+1}.xhtml', lang='zh-CN')
-                        章节.content = f'<h1>{章节标题}</h1>\n{章节正文HTML}'
-                        章节.add_item(style)
+                        chapter = epub.EpubHtml(
+                            title=章节名,
+                            file_name=f'chapter_{len(chapters)+1}.xhtml',
+                            lang='zh-CN'
+                        )
+                        chapter.content = f'<h1>{章节名}</h1><p>{"</p><p>".join(章节正文.split("\n\n"))}</p>'
+                        chapter.add_item(nav_css)
+                        book.add_item(chapter)
+                        chapters.append(chapter)
                         
-                        book.add_item(章节)
-                        章节列表.append(章节)
-                except Exception:
-                    # 忽略错误，继续处理下一章节
-                    pass
+                        # 统计字数
+                        章节字数 = len(章节正文.replace('\n', '').replace(' ', ''))
+                        总字数 += 章节字数
+                        总章节数 += 1
+                except Exception as e:
+                    print(f"{Fore.RED}处理章节 {章节文件} 时出错: {e}{Style.RESET_ALL}")
+                    continue
                 finally:
-                    # 无论成功与否，都更新进度条
                     pbar.update(1)
-    
-    # 创建目录页
-    print(f"{Fore.CYAN}正在生成目录...{Style.RESET_ALL}")
-    book.toc = [epub.Link('intro.xhtml', '简介', 'intro')] + 章节列表
-    
-    # 添加默认NCX和Nav
-    book.add_item(epub.EpubNcx())
-    book.add_item(epub.EpubNav())
-    
-    # 定义书籍线性阅读顺序
-    book.spine = ['nav', 介绍页] + 章节列表
-    
-    # 生成EPUB文件
-    print(f"{Fore.CYAN}正在写入EPUB文件...{Style.RESET_ALL}")
-    epub.write_epub(epub_文件路径, book, {})
-    
-    打印成功(f"完整EPUB电子书已生成：{epub_文件路径}")
-    打印信息("总章节数", len(章节列表), Fore.CYAN)
-    打印信息("下载时间", time.strftime('%Y-%m-%d %H:%M:%S'), Fore.CYAN)
-    打印标题("下载完成")
+        
+        if 总章节数 == 0:
+            print(f"{Fore.RED}生成EPUB文件失败：未能写入任何章节{Style.RESET_ALL}")
+            return False
+        
+        # 创建目录
+        book.toc = [(epub.Section('简介'), [intro_chapter])]
+        book.toc.extend(chapters)
+        
+        # 设置spine
+        book.spine = ['nav', intro_chapter] + chapters
+        
+        # 添加默认的NCX和Nav文件
+        book.add_item(epub.EpubNcx())
+        book.add_item(epub.EpubNav())
+        
+        # 生成epub文件
+        epub.write_epub(epub_文件路径, book, {})
+        
+        print(f"{Fore.GREEN}已生成EPUB文件：{epub_文件路径}{Style.RESET_ALL}")
+        print(f"{Fore.WHITE}总章节数: {Fore.CYAN}{总章节数}{Style.RESET_ALL}")
+        print(f"{Fore.WHITE}总字数: {Fore.CYAN}{总字数} 字{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}下载完成{Style.RESET_ALL}")
+        return True
+        
+    except Exception as e:
+        print(f"{Fore.RED}生成EPUB文件时出错: {str(e)}{Style.RESET_ALL}")
+        if os.path.exists(epub_文件路径):
+            try:
+                os.remove(epub_文件路径)
+            except:
+                pass
+        return False
 
