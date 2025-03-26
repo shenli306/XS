@@ -71,8 +71,13 @@ class DownloadThread(QThread):
         # 如果下载器实例不存在，创建一个新的
         if DownloadThread.下载器 is None:
             try:
-                from TestCase.万书屋 import 万书屋下载器
-                DownloadThread.下载器 = 万书屋下载器()
+                if 下载源 == "万书屋":
+                    from TestCase.万书屋 import 万书屋下载器
+                    DownloadThread.下载器 = 万书屋下载器()
+                elif 下载源 == "辣文小说18+":
+                    from TestCase.辣文小说18_ import 辣文小说18下载器
+                    DownloadThread.下载器 = 辣文小说18下载器()
+                
                 # 设置进度回调
                 DownloadThread.下载器.progress_callback = self.update_progress
                 # 设置日志回调
@@ -84,6 +89,28 @@ class DownloadThread(QThread):
         try:
             # 根据选择的下载源执行相应的操作
             if self.下载源 == "万书屋":
+                try:
+                    if self.小说链接:
+                        # 下载模式
+                        self.log_signal.emit("开始下载小说...", False)
+                        下载结果 = DownloadThread.下载器.下载小说(self.小说链接, self.下载格式)
+                        if 下载结果:
+                            self.complete_signal.emit("下载完成！")
+                        else:
+                            self.log_signal.emit("下载失败，请检查网络连接或重试", True)
+                            self.complete_signal.emit("下载失败！")
+                    else:
+                        # 搜索模式
+                        self.log_signal.emit("开始搜索小说...", False)
+                        搜索结果 = DownloadThread.下载器.搜索小说(self.搜索关键词)
+                        self.search_result_signal.emit(搜索结果)
+                        self.complete_signal.emit("搜索完成！")
+                        
+                except Exception as e:
+                    self.log_signal.emit(f"执行失败: {str(e)}", True)
+                    self.complete_signal.emit("操作失败！")
+            
+            elif self.下载源 == "辣文小说18+":
                 try:
                     if self.小说链接:
                         # 下载模式
