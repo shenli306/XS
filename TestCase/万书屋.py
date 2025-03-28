@@ -375,22 +375,13 @@ class 万书屋下载器:
                     
                     章节页面源码 = self.浏览器.driver.page_source
                     章节soup = BeautifulSoup(章节页面源码, 'html.parser')
-                    
                     章节内容元素 = 章节soup.select_one('#content')
-                    if not 章节内容元素:
-                        章节内容元素 = 章节soup.select_one('.chapter-content')
-                    if not 章节内容元素:
-                        章节内容元素 = 章节soup.select_one('.novel-content')
-                    if not 章节内容元素:
-                        章节内容元素 = 章节soup.select_one('.book-content')
-                    if not 章节内容元素:
-                        章节内容元素 = 章节soup.select_one('.content')
                     
                     if 章节内容元素:
                         章节内容 = 章节内容元素.text.strip()
                         
                         # 清理章节内容
-                        章节内容 = self.清理章节内容(章节内容)
+                        章节内容 = 清理章节内容(章节内容)
                         
                         # 保存章节内容
                         章节文件名 = f"{章节号:04d}_{章节名}.txt"
@@ -432,58 +423,111 @@ class 万书屋下载器:
             self.输出日志(f"下载小说时出错：{str(e)}", True)
             return False
 
-    def 清理章节内容(self, 章节内容):
-        # 清理章节内容
-        章节内容 = 章节内容.replace('    ', '\n\n')
-        
-        # 清洗内容
-        需要移除的内容 = [
-            "(http://www.shuwuwan.com/book/F72W-1.html)",
-            "章节错误,点此举报(免注册)我们会尽快处理.举报后请耐心等待,并刷新页面。",
-            "请记住本书首发域名：http://www.shuwuwan.com",
-            "www.shuwuwan.com",
-            "shuwuwan.com",
-            "书屋湾",
-            "首发域名",
-            "章节错误",
-            "点此举报",
-            "免注册",
-            "耐心等待",
-            "刷新页面"
-        ]
-        
-        for 广告内容 in 需要移除的内容:
-            章节内容 = 章节内容.replace(广告内容, "")
-        
-        # 清理章节末尾的URL
-        章节内容 = re.sub(r'https?://[^\s<>"]+|www\.[^\s<>"]+', '', 章节内容)
-        章节内容 = re.sub(r'[a-zA-Z0-9-]+\.html', '', 章节内容)
-        
-        # 清理所有类型的括号及其内容
-        章节内容 = re.sub(r'\([^)]*\)', '', 章节内容)  # 清理英文括号
-        章节内容 = re.sub(r'（[^）]*）', '', 章节内容)  # 清理中文括号
-        章节内容 = re.sub(r'【[^】]*】', '', 章节内容)  # 清理中文方括号
-        章节内容 = re.sub(r'\[[^\]]*\]', '', 章节内容)  # 清理英文方括号
-        章节内容 = re.sub(r'「[^」]*」', '', 章节内容)  # 清理中文书名号
-        章节内容 = re.sub(r'『[^』]*』', '', 章节内容)  # 清理中文双书名号
-        
-        # 清理单个括号
-        章节内容 = re.sub(r'[\(（【\[「『]', '', 章节内容)  # 清理左括号
-        章节内容 = re.sub(r'[\)）】\]」』]', '', 章节内容)  # 清理右括号
-        
-        # 清理多余的空行和空格
-        章节内容 = re.sub(r'\n\s*\n\s*\n+', '\n\n', 章节内容)  # 清理多余空行
-        章节内容 = re.sub(r'[ \t]+', ' ', 章节内容)  # 清理多余空格
-        章节内容 = re.sub(r'\n\s+', '\n', 章节内容)  # 清理行首空格
-        章节内容 = re.sub(r'\s+\n', '\n', 章节内容)  # 清理行尾空格
-        
-        # 清理等号分隔线
-        章节内容 = re.sub(r'=+', '', 章节内容)
-        
-        # 清理章节内容首尾的空白字符
-        章节内容 = 章节内容.strip()
-        
-        return 章节内容
+# 清理章节内容函数
+def 清理章节内容(章节内容):
+    # 清理章节内容
+    章节内容 = 章节内容.replace('    ', '\n\n')
+    
+    # 清洗内容 - 保留万书屋专用广告清理
+    需要移除的内容 = [
+        "(http://www.shuwuwan.com/book/F72W-1.html)",
+        "章节错误,点此举报(免注册)我们会尽快处理.举报后请耐心等待,并刷新页面。",
+        "请记住本书首发域名：http://www.shuwuwan.com",
+        "www.shuwuwan.com",
+        "shuwuwan.com",
+        "书屋湾",
+        "首发域名",
+        "章节错误",
+        "点此举报",
+        "免注册",
+        "耐心等待",
+        "刷新页面"
+    ]
+    
+    for 广告内容 in 需要移除的内容:
+        章节内容 = 章节内容.replace(广告内容, "")
+    
+    # 清理章节末尾的URL
+    章节内容 = re.sub(r'https?://[^\s<>"]+|www\.[^\s<>"]+', '', 章节内容)
+    章节内容 = re.sub(r'[a-zA-Z0-9-]+\.html', '', 章节内容)
+    
+    # 1. 移除广告和无用内容 - 采用完本阁的方式
+    章节内容 = re.sub(r'[（(].{1,30}[)）]', '', 章节内容)  # 移除括号中的广告
+    章节内容 = re.sub(r'.*www.*\n?', '', 章节内容)  # 移除包含www的行
+    章节内容 = re.sub(r'.*http.*\n?', '', 章节内容)  # 移除包含http的行
+    章节内容 = re.sub(r'.*投票推荐.*\n?', '', 章节内容)  # 移除投票推荐
+    章节内容 = re.sub(r'.*加入书签.*\n?', '', 章节内容)  # 移除加入书签
+    章节内容 = re.sub(r'.*留言反馈.*\n?', '', 章节内容)  # 移除留言反馈
+    章节内容 = re.sub(r'.*催更报错.*\n?', '', 章节内容)  # 移除催更报错
+    
+    # 清理所有类型的括号及其内容 - 保留万书屋的这部分处理
+    章节内容 = re.sub(r'\([^)]*\)', '', 章节内容)  # 清理英文括号
+    章节内容 = re.sub(r'（[^）]*）', '', 章节内容)  # 清理中文括号
+    章节内容 = re.sub(r'【[^】]*】', '', 章节内容)  # 清理中文方括号
+    章节内容 = re.sub(r'\[[^\]]*\]', '', 章节内容)  # 清理英文方括号
+    章节内容 = re.sub(r'「[^」]*」', '', 章节内容)  # 清理中文书名号
+    章节内容 = re.sub(r'『[^』]*』', '', 章节内容)  # 清理中文双书名号
+    
+    # 清理单个括号
+    章节内容 = re.sub(r'[\(（【\[「『]', '', 章节内容)  # 清理左括号
+    章节内容 = re.sub(r'[\)）】\]」』]', '', 章节内容)  # 清理右括号
+    
+    # 清理多余的空行和空格
+    章节内容 = re.sub(r'\n\s*\n\s*\n+', '\n\n', 章节内容)  # 清理多余空行
+    章节内容 = re.sub(r'[ \t]+', ' ', 章节内容)  # 清理多余空格
+    章节内容 = re.sub(r'\n\s+', '\n', 章节内容)  # 清理行首空格
+    章节内容 = re.sub(r'\s+\n', '\n', 章节内容)  # 清理行尾空格
+    
+    # 清理等号分隔线
+    章节内容 = re.sub(r'=+', '', 章节内容)
+    
+    # 清理章节内容首尾的空白字符
+    章节内容 = 章节内容.strip()
+    
+    # 2. 分段处理 - 完全采用完本阁的方式
+    paragraphs = []
+    # 按照换行符分割文本
+    lines = [line.strip() for line in 章节内容.split('\n') if line.strip()]
+    
+    current_paragraph = []
+    for line in lines:
+        # 跳过导航相关的行
+        if any(skip in line for skip in ['返回书页', '加入书签', '投票推荐', '催更报错', '留言反馈']):
+            continue
+            
+        # 如果是对话或者很短的句子，单独成段
+        if (line.startswith('"') or line.startswith('"') or 
+            line.startswith('「') or line.startswith('『') or
+            len(line) < 15):  # 短句独立成段
+            if current_paragraph:
+                paragraphs.append(''.join(current_paragraph))
+                current_paragraph = []
+            paragraphs.append(line)
+        else:
+            # 如果当前行以句号、问号、感叹号等结尾，说明是段落结束
+            if any(line.endswith(end) for end in ['。', '！', '？', '…', '!', '?', '..."', '"']):
+                current_paragraph.append(line)
+                paragraphs.append(''.join(current_paragraph))
+                current_paragraph = []
+            else:
+                current_paragraph.append(line)
+    
+    # 处理最后一个段落
+    if current_paragraph:
+        paragraphs.append(''.join(current_paragraph))
+    
+    # 构建最终文本 - 为TXT格式添加缩进
+    final_text = []
+    for p in paragraphs:
+        if p.strip():  # 确保段落不是空的
+            # 处理对话段落的缩进
+            if (p.startswith('"') or p.startswith('"') or 
+                p.startswith('「') or p.startswith('『')):
+                final_text.append(f'    {p}')
+            else:
+                final_text.append(f'    {p}')
+            
+    return '\n\n'.join(final_text)  # 段落之间用两个换行符分隔
 
 # 重定向标准错误到空设备
 class 错误抑制:
@@ -772,54 +816,7 @@ def test_打开万书屋首页():
                         章节内容 = 章节内容元素.text.strip()
                         
                         # 清理章节内容
-                        章节内容 = 章节内容.replace('    ', '\n\n')
-                        
-                        # 清洗内容
-                        需要移除的内容 = [
-                            "(http://www.shuwuwan.com/book/F72W-1.html)",
-                            "章节错误,点此举报(免注册)我们会尽快处理.举报后请耐心等待,并刷新页面。",
-                            "请记住本书首发域名：http://www.shuwuwan.com",
-                            "www.shuwuwan.com",
-                            "shuwuwan.com",
-                            "书屋湾",
-                            "首发域名",
-                            "章节错误",
-                            "点此举报",
-                            "免注册",
-                            "耐心等待",
-                            "刷新页面"
-                        ]
-                        
-                        for 广告内容 in 需要移除的内容:
-                            章节内容 = 章节内容.replace(广告内容, "")
-                        
-                        # 清理章节末尾的URL
-                        章节内容 = re.sub(r'https?://[^\s<>"]+|www\.[^\s<>"]+', '', 章节内容)
-                        章节内容 = re.sub(r'[a-zA-Z0-9-]+\.html', '', 章节内容)
-                        
-                        # 清理所有类型的括号及其内容
-                        章节内容 = re.sub(r'\([^)]*\)', '', 章节内容)  # 清理英文括号
-                        章节内容 = re.sub(r'（[^）]*）', '', 章节内容)  # 清理中文括号
-                        章节内容 = re.sub(r'【[^】]*】', '', 章节内容)  # 清理中文方括号
-                        章节内容 = re.sub(r'\[[^\]]*\]', '', 章节内容)  # 清理英文方括号
-                        章节内容 = re.sub(r'「[^」]*」', '', 章节内容)  # 清理中文书名号
-                        章节内容 = re.sub(r'『[^』]*』', '', 章节内容)  # 清理中文双书名号
-                        
-                        # 清理单个括号
-                        章节内容 = re.sub(r'[\(（【\[「『]', '', 章节内容)  # 清理左括号
-                        章节内容 = re.sub(r'[\)）】\]」』]', '', 章节内容)  # 清理右括号
-                        
-                        # 清理多余的空行和空格
-                        章节内容 = re.sub(r'\n\s*\n\s*\n+', '\n\n', 章节内容)  # 清理多余空行
-                        章节内容 = re.sub(r'[ \t]+', ' ', 章节内容)  # 清理多余空格
-                        章节内容 = re.sub(r'\n\s+', '\n', 章节内容)  # 清理行首空格
-                        章节内容 = re.sub(r'\s+\n', '\n', 章节内容)  # 清理行尾空格
-                        
-                        # 清理等号分隔线
-                        章节内容 = re.sub(r'=+', '', 章节内容)
-                        
-                        # 清理章节内容首尾的空白字符
-                        章节内容 = 章节内容.strip()
+                        章节内容 = 清理章节内容(章节内容)
                         
                         # 保存章节内容
                         章节文件名 = f"{i+1:04d}_{章节名}.txt"
@@ -864,12 +861,12 @@ def test_打开万书屋首页():
 def 生成TXT文件(小说标题, 作者, 小说介绍, 小说章节目录, 下载目录):
     try:
         # 生成TXT文件路径
-        txt文件路径 = f'{下载目录}/{小说标题}.txt'
+        txt_文件路径 = f'{下载目录}/{小说标题}.txt'
         
         # 检查是否已存在同名文件，如果存在则先删除
-        if os.path.exists(txt文件路径):
+        if os.path.exists(txt_文件路径):
             try:
-                os.remove(txt文件路径)
+                os.remove(txt_文件路径)
                 print(f"{Fore.YELLOW}已删除旧的TXT文件{Style.RESET_ALL}")
             except Exception as e:
                 print(f"{Fore.RED}删除旧文件失败: {e}{Style.RESET_ALL}")
@@ -881,34 +878,80 @@ def 生成TXT文件(小说标题, 作者, 小说介绍, 小说章节目录, 下�
             return False
             
         # 检查章节文件是否存在
-        章节文件列表 = sorted([f for f in os.listdir(小说章节目录) if f.endswith('.txt')])
+        章节文件列表 = sorted([f for f in os.listdir(小说章节目录) if f.endswith('.txt')],
+                      key=lambda x: int(x.split('_')[0]))
         if not 章节文件列表:
             print(f"{Fore.RED}未找到任何章节文件{Style.RESET_ALL}")
             return False
         
-        with open(txt文件路径, 'w', encoding='utf-8') as outfile:
-            # 写入小说信息
-            outfile.write(f"书名：{小说标题}\n")
-            outfile.write(f"作者：{作者}\n")
-            outfile.write(f"简介：\n{小说介绍}\n\n")
-            outfile.write("=" * 50 + "\n\n")
-            
-            # 按顺序写入章节内容
-            总字数 = 0
-            总章节数 = 0
-            
-            # 添加进度条
-            with tqdm(total=len(章节文件列表), desc="生成TXT文件", unit="章",
-                     bar_format="{l_bar}%s{bar}%s{r_bar}" % (Fore.GREEN, Style.RESET_ALL)) as pbar:
+        # 添加进度条
+        with tqdm(total=len(章节文件列表), desc="生成TXT文件", unit="章",
+                 bar_format="{l_bar}%s{bar}%s{r_bar}" % (Fore.GREEN, Style.RESET_ALL)) as pbar:
+            with open(txt_文件路径, 'w', encoding='utf-8') as f:
+                # 写入小说信息
+                f.write(f"《{小说标题}》\n")
+                f.write(f"作者：{作者}\n")
+                f.write("\n简介：\n")
+                f.write(小说介绍 + "\n\n")
+                f.write("=" * 50 + "\n\n")
+                
+                # 写入章节内容
+                总字数 = 0
+                总章节数 = 0
                 for 章节文件 in 章节文件列表:
                     try:
-                        with open(f'{小说章节目录}/{章节文件}', 'r', encoding='utf-8') as infile:
-                            章节内容 = infile.read()
-                            outfile.write(章节内容)
-                            outfile.write("\n\n" + "=" * 30 + "\n\n")  # 章节分隔符
+                        with open(f'{小说章节目录}/{章节文件}', 'r', encoding='utf-8') as 章节f:
+                            章节内容 = 章节f.read()
+                            章节名 = 章节内容.split('\n')[0]  # 第一行是章节名
+                            章节正文 = '\n'.join(章节内容.split('\n')[2:])  # 跳过标题和空行
                             
-                            # 统计字数（去除章节标题和空白后）
-                            章节正文 = '\n'.join(章节内容.split('\n')[2:])  # 前两行是章节标题和空行
+                            # 写入章节标题
+                            f.write(f"\n{章节名}\n")
+                            f.write("-" * len(章节名) + "\n\n")
+                            
+                            # 使用完本阁的分段处理逻辑
+                            paragraphs = []
+                            # 按照换行符分割文本
+                            lines = [line.strip() for line in 章节正文.split('\n') if line.strip()]
+                            
+                            current_paragraph = []
+                            for line in lines:
+                                # 跳过导航相关的行
+                                if any(skip in line for skip in ['返回书页', '加入书签', '投票推荐', '催更报错', '留言反馈']):
+                                    continue
+                                    
+                                # 如果是对话或者很短的句子，单独成段
+                                if (line.startswith('"') or line.startswith('"') or 
+                                    line.startswith('「') or line.startswith('『') or
+                                    len(line) < 15):  # 短句独立成段
+                                    if current_paragraph:
+                                        paragraphs.append(''.join(current_paragraph))
+                                        current_paragraph = []
+                                    paragraphs.append(line)
+                                else:
+                                    # 如果当前行以句号、问号、感叹号等结尾，说明是段落结束
+                                    if any(line.endswith(end) for end in ['。', '！', '？', '…', '!', '?', '..."', '"']):
+                                        current_paragraph.append(line)
+                                        paragraphs.append(''.join(current_paragraph))
+                                        current_paragraph = []
+                                    else:
+                                        current_paragraph.append(line)
+                            
+                            # 处理最后一个段落
+                            if current_paragraph:
+                                paragraphs.append(''.join(current_paragraph))
+                            
+                            # 写入段落
+                            for p in paragraphs:
+                                if p.strip():  # 确保段落不是空的
+                                    # 处理对话段落的缩进
+                                    if (p.startswith('"') or p.startswith('"') or 
+                                        p.startswith('「') or p.startswith('『')):
+                                        f.write(f"    {p}\n\n")
+                                    else:
+                                        f.write(f"    {p}\n\n")
+                            
+                            # 统计字数
                             章节字数 = len(章节正文.replace('\n', '').replace(' ', ''))
                             总字数 += 章节字数
                             总章节数 += 1
@@ -916,22 +959,13 @@ def 生成TXT文件(小说标题, 作者, 小说介绍, 小说章节目录, 下�
                         print(f"{Fore.RED}处理章节 {章节文件} 时出错: {e}{Style.RESET_ALL}")
                         continue
                     finally:
-                        # 无论成功与否，都更新进度条
                         pbar.update(1)
-            
-            # 在文件末尾添加统计信息
-            outfile.write(f"\n\n完结统计：\n")
-            outfile.write(f"总章节数：{总章节数}\n")
-            outfile.write(f"总字数：{总字数} 字\n")
-            outfile.write(f"下载时间：{time.strftime('%Y-%m-%d %H:%M:%S')}\n")
         
         if 总章节数 == 0:
             print(f"{Fore.RED}生成TXT文件失败：未能写入任何章节{Style.RESET_ALL}")
-            if os.path.exists(txt文件路径):
-                os.remove(txt文件路径)
             return False
-            
-        print(f"{Fore.GREEN}完整TXT小说文件已生成：{下载目录}/{小说标题}.txt{Style.RESET_ALL}")
+        
+        print(f"{Fore.GREEN}已生成TXT文件：{txt_文件路径}{Style.RESET_ALL}")
         print(f"{Fore.WHITE}总章节数: {Fore.CYAN}{总章节数}{Style.RESET_ALL}")
         print(f"{Fore.WHITE}总字数: {Fore.CYAN}{总字数} 字{Style.RESET_ALL}")
         print(f"{Fore.CYAN}下载完成{Style.RESET_ALL}")
@@ -939,9 +973,9 @@ def 生成TXT文件(小说标题, 作者, 小说介绍, 小说章节目录, 下�
         
     except Exception as e:
         print(f"{Fore.RED}生成TXT文件时出错: {str(e)}{Style.RESET_ALL}")
-        if os.path.exists(txt文件路径):
+        if os.path.exists(txt_文件路径):
             try:
-                os.remove(txt文件路径)
+                os.remove(txt_文件路径)
             except:
                 pass
         return False
@@ -995,16 +1029,41 @@ def 生成EPUB文件(小说标题, 作者, 小说介绍, 小说章节目录, 下
         # 添加CSS样式
         style = '''
             @namespace epub "http://www.idpf.org/2007/ops";
-            body { font-family: SimSun, serif; }
-            h1 { text-align: center; color: #333; margin: 1em 0; }
-            p { text-indent: 2em; line-height: 1.5; margin: 0.5em 0; }
+            body {
+                font-family: "Noto Serif CJK SC", "Source Han Serif SC", SimSun, serif;
+                margin: 5%;
+                text-align: justify;
+            }
+            h1 {
+                text-align: center;
+                color: #333;
+                margin: 2em 0 1em;
+                font-weight: bold;
+                font-size: 1.5em;
+            }
+            p {
+                text-indent: 2em;
+                line-height: 1.8;
+                margin: 0.8em 0;
+                font-size: 1.1em;
+            }
+            .dialogue {
+                text-indent: 0;
+                margin: 0.5em 1em;
+            }
+            .chapter-content {
+                margin-top: 2em;
+            }
         '''
         nav_css = epub.EpubItem(uid="style_nav", file_name="style/nav.css", media_type="text/css", content=style)
         book.add_item(nav_css)
         
         # 添加简介章节
         intro_chapter = epub.EpubHtml(title='简介', file_name='intro.xhtml', lang='zh-CN')
-        intro_chapter.content = f'<h1>简介</h1><p>{小说介绍}</p>'
+        # 处理简介内容，确保正确分段
+        简介内容 = 小说介绍.replace('\n\n', '</p><p>')  # 将双换行转换为段落
+        简介内容 = 简介内容.replace('\n', '</p><p>')    # 将单换行转换为段落
+        intro_chapter.content = f'<h1>简介</h1><p>{简介内容}</p>'
         intro_chapter.add_item(nav_css)
         book.add_item(intro_chapter)
         
@@ -1029,7 +1088,65 @@ def 生成EPUB文件(小说标题, 作者, 小说介绍, 小说章节目录, 下
                             file_name=f'chapter_{len(chapters)+1}.xhtml',
                             lang='zh-CN'
                         )
-                        chapter.content = f'<h1>{章节名}</h1><p>{"</p><p>".join(章节正文.split("\n\n"))}</p>'
+                        
+                        # 使用完本阁的分段处理逻辑
+                        paragraphs = []
+                        # 按照换行符分割文本
+                        lines = [line.strip() for line in 章节正文.split('\n') if line.strip()]
+                        
+                        current_paragraph = []
+                        for line in lines:
+                            # 跳过导航相关的行
+                            if any(skip in line for skip in ['返回书页', '加入书签', '投票推荐', '催更报错', '留言反馈']):
+                                continue
+                                
+                            # 如果是对话或者很短的句子，单独成段
+                            if (line.startswith('"') or line.startswith('"') or 
+                                line.startswith('「') or line.startswith('『') or
+                                len(line) < 15):  # 短句独立成段
+                                if current_paragraph:
+                                    paragraphs.append(''.join(current_paragraph))
+                                    current_paragraph = []
+                                paragraphs.append(line)
+                            else:
+                                # 如果当前行以句号、问号、感叹号等结尾，说明是段落结束
+                                if any(line.endswith(end) for end in ['。', '！', '？', '…', '!', '?', '..."', '"']):
+                                    current_paragraph.append(line)
+                                    paragraphs.append(''.join(current_paragraph))
+                                    current_paragraph = []
+                                else:
+                                    current_paragraph.append(line)
+                        
+                        # 处理最后一个段落
+                        if current_paragraph:
+                            paragraphs.append(''.join(current_paragraph))
+                        
+                        # 格式化HTML
+                        formatted_content = []
+                        for p in paragraphs:
+                            if p.strip():  # 确保段落不是空的
+                                # 处理对话段落的缩进
+                                if (p.startswith('"') or p.startswith('"') or 
+                                    p.startswith('「') or p.startswith('『')):
+                                    formatted_content.append(f'<p class="dialogue">{p}</p>')
+                                else:
+                                    formatted_content.append(f'<p>{p}</p>')
+                        
+                        content = '\n'.join(formatted_content)
+                        
+                        if not content:
+                            raise ValueError("章节内容为空")
+                            
+                        # 将处理后的内容转换为HTML
+                        chapter.content = f'''<html>
+                        <head></head>
+                        <body>
+                            <h1>{章节名}</h1>
+                            <div class="chapter-content">
+                                {content}
+                            </div>
+                        </body>
+                        </html>'''
                         chapter.add_item(nav_css)
                         book.add_item(chapter)
                         chapters.append(chapter)
