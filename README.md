@@ -121,3 +121,13 @@ python Run.py
 3. 提交您的更改
 4. 发起 Pull Request
 
+## 许可证
+
+本项目采用MIT许可证 - 详情请参阅 [LICENSE](LICENSE) 文件
+
+## 联系方式
+
+如有问题或建议，请通过以下方式联系：
+
+- 提交 Issue
+- 发送邮件至：[your-email@example.com] 
